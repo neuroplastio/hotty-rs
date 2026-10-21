@@ -14,7 +14,7 @@ another hotty version is no host to it, and the program draws in cells.
 
 | crate | what it is | SDK.md |
 | --- | --- | --- |
-| `hotty` | the wire layer: builders, `encode`, `Decoder`, `Scanner`, `Detector`, replies, events and capabilities, keys and keymaps; a `Field` edited as a host edits one; `Link`, `Session` and `Terminal` | §3, §4.1, §4.3, §4.6 |
+| `hotty` | the wire layer: builders, `encode`, `Decoder`, `Scanner`, `Detector`, replies, events and capabilities, keys and keymaps; a `Field` edited as a host edits one; `Link`, `Session` and `Terminal`; and `host`, what a host or a relay reads and writes | §3, §4.1, §4.3, §4.6 |
 | `hotty-ratatui` | hotty for a [ratatui](https://ratatui.rs) program: a `Surface` widget, a session that reads the terminal and hands back crossterm's events, a backend | §4.3 |
 
 0.4.x speaks hotty 0.4; the patch number is this repository's own.
@@ -112,6 +112,42 @@ for key in decode_keys(&read).into_iter().flatten() {
     }
 }
 ```
+
+## A host or a relay
+
+`hotty::host` is the other side of the wire, for a host or for a relay that
+stands between programs and a host (SDK.md §4.5). hotty-blitz is built on
+it.
+
+```rust
+use hotty::host::{Output, Splitter, delta_of, reply_err};
+
+let mut split = Splitter::new();
+split.feed(&program_output, &mut |o| match o {
+    Output::Bytes(b) => terminal.write(b),          // to the cells, as it is
+    Output::Seq(seq, b) => { on_mode(&seq); terminal.write(b) } // the alternate screen, a reset…
+    Output::Command(cmd) => match cmd.action() {
+        "delta" => match delta_of(&cmd) {          // checked whole first (SPEC §6.1)
+            Ok(ops) => apply(ops),
+            Err(e) => reply(reply_err(&cmd, &e)),   // EINVAL, and the op at fault
+        },
+        _ => {}
+    },
+    Output::Invalid(why) => log(why),
+});
+```
+
+- `Splitter` cuts a program's output into the bytes to pass on, the
+  control sequences a host acts on (private modes, erase in display, a
+  full reset) with their bytes, and hotty's commands, decoded.
+- `delta_of`, `menu_of`, `menu_show_of`, `touch_of` and `placement_of` read
+  a command as SPEC has a host read it, and refuse one with the `EINVAL` to
+  answer; `quiet_of` and `speaks` say what to answer.
+- `reply_ok`, `reply_err`, `reply_query` and `encode_event` write what a
+  host sends, each body typed as SPEC §3.3 types it. A relay that re-names
+  an event's surface passes its detail on as it came.
+- `hotty::keys` has what a host that sees the key itself needs:
+  `KeyParts`, `Keymap::press`, `Platform::edit_press`.
 
 ## Examples
 

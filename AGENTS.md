@@ -27,6 +27,10 @@ grow them.
   `term`) and unicode-segmentation, nothing else; base64 and msgpack are its
   own. `hotty-ratatui` adds ratatui-core, ratatui-crossterm and
   signal-hook.
+- **hotty-blitz builds on `hotty`** (its host side, the splitter, the
+  Decoder and keys), as a path dependency on this checkout. A change to
+  `host`, `decoder`, `keys` or the messages runs hotty-blitz's suite too
+  (`make test` there, with `HOTTY_DIR`), which holds the host vectors.
 - **hotty-ratatui reads the terminal itself.** crossterm's reader takes a
   host's replies for keys, so the session cuts hotty's sequences out and
   parses the rest into crossterm's events (`input.rs`, written from the
