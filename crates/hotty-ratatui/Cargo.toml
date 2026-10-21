@@ -1,0 +1,33 @@
+[package]
+name = "hotty-ratatui"
+description = "hotty (HTML over the TTY) for ratatui programs: surfaces as widgets, cells where the terminal is not a host"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["hotty", "ratatui", "terminal", "html", "tui"]
+categories.workspace = true
+
+[features]
+default = []
+# ratatui's scrolling regions: enable it here when the program enables it
+# for ratatui, since it adds methods to the Backend trait.
+scrolling-regions = ["ratatui-core/scrolling-regions", "ratatui-crossterm/scrolling-regions"]
+
+[dependencies]
+hotty.workspace = true
+ratatui-core.workspace = true
+ratatui-crossterm.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+signal-hook.workspace = true
+
+[dev-dependencies]
+ratatui = { workspace = true, features = ["crossterm"] }
+
+[lints]
+workspace = true

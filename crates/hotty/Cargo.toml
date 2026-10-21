@@ -1,0 +1,36 @@
+[package]
+name = "hotty"
+description = "hotty (HTML over the TTY) for Rust programs: the wire, a terminal, and a framework's session"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["zlib", "term"]
+# Compress what a program sends (SDK.md §3.3) and inflate what a relay meets.
+# Without it, a payload marked o=z decodes as invalid.
+zlib = ["dep:flate2"]
+# The process's terminal (SDK.md §4.1): /dev/tty, raw mode, a reader thread.
+# Unix only.
+term = ["dep:rustix"]
+
+[dependencies]
+flate2 = { workspace = true, optional = true }
+# Grapheme clusters (UAX #29) for the Field and DecodeKeys (SDK.md §4.6):
+# Rust's standard library has none.
+unicode-segmentation.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["preserve_order", "arbitrary_precision"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/hotty", "crates/hotty-ratatui"]
+
+[workspace.package]
+# MAJOR.MINOR is the spec's, PATCH this repository's own (gov P-5 rule 6).
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/neuroplastio/hotty-rs"
+homepage = "https://github.com/neuroplastio/hotty"
+keywords = ["hotty", "terminal", "html", "tty", "tui"]
+categories = ["command-line-interface"]
+
+[workspace.dependencies]
+hotty = { path = "crates/hotty", version = "0.4.0" }
+flate2 = "1.1"
+unicode-segmentation = "1.13"
+rustix = { version = "1.1", features = ["termios", "fs", "event", "stdio", "process"] }
+ratatui = { version = "0.30", default-features = false }
+ratatui-core = "0.1"
+ratatui-crossterm = "0.1"
+signal-hook = "0.3"
+serde_json = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
