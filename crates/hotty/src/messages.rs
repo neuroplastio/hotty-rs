@@ -4,9 +4,11 @@
 //! one that does not decode leaves absent what it would fill, and the
 //! message stands (SDK.md §2.7).
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::control::Control;
+use crate::msgpack::Value;
 
 /// One hotty message, decoded (SDK.md §3.9): a reply or an event from the
 /// host, or a command from a program (what a host, a relay or a test
@@ -38,15 +40,153 @@ impl Message {
         self.control.action()
     }
 
-    /// The message as a reply (`a=ok` or `a=err`), or `None` when it is not one.
-    pub fn reply(&self) -> Option<Reply> {
-        todo!("messages: Message::reply")
+    /// The payload as UTF-8 text, a character that is not UTF-8 replaced:
+    /// a document's markup.
+    pub fn text(&self) -> std::borrow::Cow<'_, str> {
+        String::from_utf8_lossy(&self.payload)
     }
 
-    /// The message as an event (`a=ev`), or `None` when it is not one.
-    pub fn event(&self) -> Option<Event> {
-        todo!("messages: Message::event")
+    /// The message as a reply (`a=ok` or `a=err`), or `None` when it is not one.
+    pub fn reply(&self) -> Option<Reply> {
+        let ok = match self.action() {
+            "ok" => true,
+            "err" => false,
+            _ => return None,
+        };
+        let re = self.get("re").unwrap_or_default().to_owned();
+        let mut r = Reply {
+            ok,
+            n: number(self.get("n")),
+            surface: self.get("s").map(str::to_owned),
+            cols: number(self.get("c")),
+            rows: number(self.get("r")),
+            op: number(self.get("i")),
+            message: self.clone(),
+            ..Reply::default()
+        };
+        if ok {
+            if re == "q" {
+                r.caps = body::read(&self.payload, &body::CAPS).map(|b| body::caps(&b, false));
+            }
+        } else if let Some(b) = body::read(&self.payload, &body::ERROR) {
+            r.code = body::str(&b, "code");
+            r.detail = body::str(&b, "detail");
+        }
+        r.re = re;
+        Some(r)
     }
+
+    /// The message as an event (`a=ev`), or `None` when it is not one. Its
+    /// detail is read by its kind (SDK.md §3.9): a field named `value` in a
+    /// form's `submit` is in `fields`, and nowhere else.
+    pub fn event(&self) -> Option<Event> {
+        if self.action() != "ev" {
+            return None;
+        }
+        let kind = self.get("e").unwrap_or_default().to_owned();
+        let d = body::detail(&kind).and_then(|t| body::read(&self.payload, t));
+        let d = d.as_ref();
+        let k = kind.as_str();
+        let str_of = |key| d.and_then(|d| body::str(d, key));
+        let int_of = |key| d.and_then(|d| d.get(key)).and_then(Value::as_int);
+        let mut e = Event {
+            surface: self.get("s").map(str::to_owned),
+            target: self.get("t").unwrap_or_default().to_owned(),
+            message: self.clone(),
+            ..Event::default()
+        };
+        if matches!(k, "click" | "change" | "input") {
+            e.value = str_of("value");
+        }
+        if k == "change" {
+            e.checked = d.and_then(|d| d.get("checked")).and_then(Value::as_bool);
+        }
+        if k == "submit" {
+            e.fields = d.and_then(|d| body::fields(d.get("fields")?));
+        }
+        if matches!(k, "click" | "press" | "dragstart" | "drag" | "dragend") {
+            e.mods = int_of("mods")
+                .and_then(|m| u32::try_from(m).ok())
+                .unwrap_or(0);
+        }
+        if matches!(k, "click" | "press") {
+            e.area = d.and_then(|d| body::area(d.get("area")?));
+        }
+        match k {
+            "click" => {
+                e.link = str_of("href").map(|href| Link {
+                    href,
+                    url: str_of("url"),
+                });
+                e.count = Some(
+                    int_of("count")
+                        .filter(|&n| n > 1)
+                        .and_then(|n| u32::try_from(n).ok())
+                        .unwrap_or(1),
+                );
+            }
+            "fit" => {
+                e.fit_rows = int_of("r")
+                    .filter(|&r| r >= 1)
+                    .and_then(|r| u32::try_from(r).ok())
+            }
+            "dragstart" | "drag" | "dragend" => {
+                if let (Some(c), Some(r)) = (int_of("c"), int_of("r")) {
+                    e.drag = Some(Drag {
+                        c,
+                        r,
+                        x: int_of("x"),
+                        y: int_of("y"),
+                        tx: int_of("tx"),
+                        ty: int_of("ty"),
+                    });
+                }
+            }
+            "hover" => {
+                let out = d.and_then(|d| d.get("out")).and_then(Value::as_bool) == Some(true);
+                e.hover = if out {
+                    Some(Hover {
+                        c: None,
+                        r: None,
+                        out: true,
+                    })
+                } else if let (Some(c), Some(r)) = (int_of("c"), int_of("r")) {
+                    Some(Hover {
+                        c: Some(c),
+                        r: Some(r),
+                        out: false,
+                    })
+                } else {
+                    None
+                };
+            }
+            "view" => e.view = d.map(body::view),
+            "command" => {
+                e.command = str_of("name").map(|name| {
+                    let text = str_of("text");
+                    Command {
+                        name,
+                        key: str_of("key").unwrap_or_default(),
+                        has_text: text.is_some(),
+                        text: text.unwrap_or_default(),
+                    }
+                })
+            }
+            "caps" => e.changed = d.map(|d| body::caps(d, true)),
+            _ => {}
+        }
+        e.kind = kind;
+        Some(e)
+    }
+}
+
+/// A control value as a number: `None` when it is not one, digits only.
+fn number<T: std::str::FromStr>(v: Option<&str>) -> Option<T> {
+    let v = v?;
+    if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    v.parse().ok()
 }
 
 /// The host's answer to a command (SPEC §3.6).
@@ -254,7 +394,7 @@ pub struct Area {
 pub struct View {
     /// Each element with `data-on~=view` and an id that is in view, by its
     /// id, with its cells.
-    pub areas: std::collections::BTreeMap<String, Area>,
+    pub areas: BTreeMap<String, Area>,
     /// The document's root is scrolled as far down as it goes.
     pub at_end: bool,
 }
@@ -301,9 +441,9 @@ pub struct Caps {
     pub features: Option<Vec<String>>,
     /// The host's limits, such as `surfaces` (a count), `resources` and
     /// `message` (bytes) (SPEC §13).
-    pub limits: Option<std::collections::BTreeMap<String, i64>>,
+    pub limits: Option<BTreeMap<String, i64>>,
     /// The host's network policy, from directive to the sources it allows (SPEC §7.2).
-    pub net: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    pub net: Option<BTreeMap<String, Vec<String>>>,
     /// The host's edit shortcuts, from each action to its keys, in the
     /// order it sent them (SPEC §10.2); a host that reports them takes edit
     /// commands (SPEC §10.6).
@@ -336,9 +476,245 @@ impl Caps {
     /// These capabilities with the fields a `caps` event changed in place of
     /// their own, and without those it empties: a field that became absent
     /// comes as `{}`, `[]` or `""` (SPEC §9).
+    ///
+    /// In a `caps` event's [`changed`](Event::changed) capabilities, a
+    /// `cellcss` the host emptied, or sent without its `w` or `h`, is a
+    /// zero [`CellCss`], which merging makes absent.
     #[must_use]
     pub fn merge(&self, changed: &Caps) -> Caps {
-        let _ = changed;
-        todo!("messages: Caps::merge")
+        fn put<T: Clone>(to: &mut Option<T>, from: &Option<T>, empty: impl Fn(&T) -> bool) {
+            if let Some(v) = from {
+                *to = (!empty(v)).then(|| v.clone());
+            }
+        }
+        let mut c = self.clone();
+        put(&mut c.v, &changed.v, String::is_empty);
+        put(&mut c.cell_css, &changed.cell_css, |x| {
+            *x == CellCss::default()
+        });
+        put(&mut c.scale, &changed.scale, |_| false);
+        put(&mut c.scheme, &changed.scheme, String::is_empty);
+        put(&mut c.modifier, &changed.modifier, String::is_empty);
+        put(&mut c.features, &changed.features, Vec::is_empty);
+        put(&mut c.limits, &changed.limits, BTreeMap::is_empty);
+        put(&mut c.net, &changed.net, BTreeMap::is_empty);
+        put(&mut c.edit, &changed.edit, Vec::is_empty);
+        put(&mut c.host, &changed.host, String::is_empty);
+        put(&mut c.version, &changed.version, String::is_empty);
+        c
+    }
+
+    /// The names of the fields these capabilities have, as a host's body
+    /// names them (`cellcss`, `mod`): for a `caps` event's
+    /// [`changed`](Event::changed) capabilities, what changed.
+    pub fn fields(&self) -> Vec<&'static str> {
+        [
+            ("v", self.v.is_some()),
+            ("cellcss", self.cell_css.is_some()),
+            ("scale", self.scale.is_some()),
+            ("scheme", self.scheme.is_some()),
+            ("mod", self.modifier.is_some()),
+            ("features", self.features.is_some()),
+            ("limits", self.limits.is_some()),
+            ("net", self.net.is_some()),
+            ("edit", self.edit.is_some()),
+            ("host", self.host.is_some()),
+            ("version", self.version.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(name, has)| has.then_some(name))
+        .collect()
+    }
+}
+
+/// The types of a host's bodies (SPEC §3.3): an error's (§3.6), the
+/// capabilities (§4), and each event kind's detail (§9). A body is read
+/// whole as its type (SDK.md §3.9): one msgpack map that [`msgpack::read`]
+/// takes, each field its type names of that type, and any other field of
+/// any type.
+mod body {
+    use std::collections::BTreeMap;
+
+    use super::{Area, Caps, CellCss, View};
+    use crate::msgpack::{self, Value};
+
+    /// A field's type: one of SPEC §3.3's four, an array of a type, a map
+    /// by its fields' types, or a map of any names to a type.
+    pub(super) enum Ty {
+        Int,
+        Float,
+        Str,
+        Bool,
+        Array(&'static Ty),
+        Map(&'static [(&'static str, Ty)]),
+        Each(&'static Ty),
+    }
+
+    use Ty::{Array, Bool, Each, Float, Int, Map, Str};
+
+    pub(super) const ERROR: Ty = Map(&[("code", Str), ("detail", Str)]);
+
+    const STRS: Ty = Array(&Str);
+
+    pub(super) const CAPS: Ty = Map(&[
+        ("v", Str),
+        ("cellcss", Map(&[("w", Float), ("h", Float)])),
+        ("scale", Float),
+        ("scheme", Str),
+        ("mod", Str),
+        ("features", STRS),
+        ("limits", Each(&Int)),
+        ("net", Each(&STRS)),
+        ("edit", Each(&STRS)),
+        ("host", Str),
+        ("version", Str),
+    ]);
+
+    const AREA: Ty = Map(&[("c", Int), ("r", Int), ("w", Int), ("h", Int)]);
+
+    const DRAG: Ty = Map(&[
+        ("c", Int),
+        ("r", Int),
+        ("mods", Int),
+        ("x", Int),
+        ("y", Int),
+        ("tx", Int),
+        ("ty", Int),
+    ]);
+
+    /// The type of a kind's detail; `None` for a kind whose detail this SDK
+    /// does not read.
+    pub(super) fn detail(kind: &str) -> Option<&'static Ty> {
+        Some(match kind {
+            "click" => &Map(&[
+                ("value", Str),
+                ("href", Str),
+                ("url", Str),
+                ("area", AREA),
+                ("mods", Int),
+                ("count", Int),
+            ]),
+            "press" => &Map(&[("area", AREA), ("mods", Int)]),
+            "change" => &Map(&[("checked", Bool), ("value", Str)]),
+            "input" => &Map(&[("value", Str)]),
+            "submit" => &Map(&[("fields", Array(&STRS))]),
+            "fit" => &Map(&[("r", Int)]),
+            "dragstart" | "drag" | "dragend" => &DRAG,
+            "hover" => &Map(&[("c", Int), ("r", Int), ("out", Bool)]),
+            "view" => &Map(&[("in", Each(&AREA)), ("end", Bool)]),
+            "command" => &Map(&[("name", Str), ("key", Str), ("text", Str)]),
+            "caps" => &CAPS,
+            _ => return None,
+        })
+    }
+
+    fn is(v: &Value, t: &Ty) -> bool {
+        match (t, v) {
+            (Int, Value::Int(_)) | (Float, Value::Float(_)) | (Str, Value::Str(_)) => true,
+            (Bool, Value::Bool(_)) => true,
+            (Array(t), Value::Array(a)) => a.iter().all(|v| is(v, t)),
+            (Each(t), Value::Map(m)) => m.iter().all(|(_, v)| is(v, t)),
+            (Map(fields), Value::Map(m)) => m.iter().all(|(k, v)| {
+                fields
+                    .iter()
+                    .find(|(name, _)| name == k)
+                    .is_none_or(|(_, t)| is(v, t))
+            }),
+            _ => false,
+        }
+    }
+
+    /// The body read as its type: `None` when it does not decode.
+    pub(super) fn read(payload: &[u8], t: &Ty) -> Option<Value> {
+        let v = msgpack::read(payload)?;
+        (matches!(v, Value::Map(_)) && is(&v, t)).then_some(v)
+    }
+
+    pub(super) fn str(v: &Value, key: &str) -> Option<String> {
+        v.get(key)?.as_str().map(str::to_owned)
+    }
+
+    fn strs(v: &Value) -> Option<Vec<String>> {
+        v.as_array()?
+            .iter()
+            .map(|x| x.as_str().map(str::to_owned))
+            .collect()
+    }
+
+    /// A submit's fields: each a pair of a name and a value, or none.
+    pub(super) fn fields(v: &Value) -> Option<Vec<(String, String)>> {
+        v.as_array()?
+            .iter()
+            .map(|p| match strs(p)?.as_slice() {
+                [name, value] => Some((name.clone(), value.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An element's cells: absent unless the map has all of c, r, w and h.
+    pub(super) fn area(v: &Value) -> Option<Area> {
+        let n = |k| v.get(k)?.as_int();
+        Some(Area {
+            c: n("c")?,
+            r: n("r")?,
+            w: n("w")?,
+            h: n("h")?,
+        })
+    }
+
+    /// A view's elements in view, leaving out one whose area lacks a field.
+    pub(super) fn view(d: &Value) -> View {
+        let areas = d
+            .get("in")
+            .and_then(Value::as_map)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|(id, a)| Some((id.clone(), area(a)?)))
+            .collect();
+        View {
+            areas,
+            at_end: d.get("end").and_then(Value::as_bool) == Some(true),
+        }
+    }
+
+    /// The capabilities of a body read as [`CAPS`]. A `caps` event's
+    /// (`changed`) keep a `cellcss` that lacks `w` or `h` as a zero one,
+    /// so that merging empties it.
+    pub(super) fn caps(b: &Value, changed: bool) -> Caps {
+        let cell_css = b.get("cellcss").and_then(|c| {
+            let f = |k| c.get(k)?.as_float();
+            match (f("w"), f("h")) {
+                (Some(w), Some(h)) => Some(CellCss { w, h }),
+                _ if changed => Some(CellCss::default()),
+                _ => None,
+            }
+        });
+        let each = |k| -> Option<Vec<(String, Value)>> { Some(b.get(k)?.as_map()?.to_vec()) };
+        Caps {
+            v: str(b, "v"),
+            cell_css,
+            scale: b.get("scale").and_then(Value::as_float),
+            scheme: str(b, "scheme"),
+            modifier: str(b, "mod"),
+            features: b.get("features").and_then(strs),
+            limits: each("limits").map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), v.as_int()?)))
+                    .collect::<BTreeMap<_, _>>()
+            }),
+            net: each("net").map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), strs(v)?)))
+                    .collect::<BTreeMap<_, _>>()
+            }),
+            edit: each("edit").map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), strs(v)?)))
+                    .collect()
+            }),
+            host: str(b, "host"),
+            version: str(b, "version"),
+        }
     }
 }
