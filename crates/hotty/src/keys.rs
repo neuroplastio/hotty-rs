@@ -161,10 +161,14 @@ pub(crate) fn is_move(action: &str) -> bool {
     MOVES.contains(&action)
 }
 
-const SUPER: u8 = 1;
-const CTRL: u8 = 2;
-const ALT: u8 = 4;
-const SHIFT: u8 = 8;
+/// `super`: a bit of [`KeyParts::mods`], in [`MODIFIERS`]' order.
+pub const SUPER: u8 = 1;
+/// `ctrl`: a bit of [`KeyParts::mods`].
+pub const CTRL: u8 = 2;
+/// `alt`: a bit of [`KeyParts::mods`].
+pub const ALT: u8 = 4;
+/// `shift`: a bit of [`KeyParts::mods`].
+pub const SHIFT: u8 = 8;
 
 /// The physical keys (myelin key names, Appendix A).
 const PHYSICAL: &[&str] = &[
@@ -359,24 +363,39 @@ const OTHER: &[(&str, &str)] = &[
 ];
 
 /// What a key's value is (myelin key names §2.1).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    /// A character: what a key types (`a`, `!`, `é`).
     Character,
+    /// A key named by its place or its function (`arrow_left`, `key_w`).
     Physical,
+    /// A modifier on its own (`shift`).
     Modifier,
 }
 
 /// A canonical key's name, split: its modifiers (a bit for each of
-/// [`MODIFIERS`]) and its value.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct KeyParts {
-    mods: u8,
-    value: String,
+/// [`MODIFIERS`]: [`SUPER`], [`CTRL`], [`ALT`], [`SHIFT`]) and its value.
+/// For a host that names the keys it is given (SPEC §10.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct KeyParts {
+    /// The modifiers, a bit each.
+    pub mods: u8,
+    /// The key itself: a character, or a physical key's name.
+    pub value: String,
 }
 
 impl KeyParts {
+    /// A key's parts from its modifiers and its value.
+    pub fn new(super_: bool, ctrl: bool, alt: bool, shift: bool, value: &str) -> KeyParts {
+        let bit = |on: bool, b: u8| if on { b } else { 0 };
+        KeyParts {
+            mods: bit(super_, SUPER) | bit(ctrl, CTRL) | bit(alt, ALT) | bit(shift, SHIFT),
+            value: value.to_string(),
+        }
+    }
+
     /// A canonical key's parts.
-    fn split(name: &str) -> KeyParts {
+    pub fn split(name: &str) -> KeyParts {
         let mut rest = name;
         let mut mods = 0;
         while let Some(i) = rest.find('+') {
@@ -392,11 +411,13 @@ impl KeyParts {
         }
     }
 
-    fn shift(&self) -> bool {
+    /// Whether `shift` is held.
+    pub fn shift(&self) -> bool {
         self.mods & SHIFT != 0
     }
 
-    fn kind(&self) -> Kind {
+    /// What its value is.
+    pub fn kind(&self) -> Kind {
         if PHYSICAL.contains(&self.value.as_str()) {
             Kind::Physical
         } else if MODIFIERS.contains(&self.value.as_str()) {
@@ -406,7 +427,9 @@ impl KeyParts {
         }
     }
 
-    fn name(&self) -> String {
+    /// Its canonical name: the modifiers in [`MODIFIERS`]' order, then the
+    /// value.
+    pub fn name(&self) -> String {
         join(self.mods, &self.value)
     }
 
@@ -640,10 +663,11 @@ pub fn key_text(key: &str) -> Option<String> {
     })
 }
 
-/// The key of a character with modifiers: a capital is `shift` with its
-/// letter, the space bar is `space`, and `shift` is in any other character
-/// already (`!`, not `shift+!`).
-fn char_key(mut mods: u8, c: &str) -> String {
+/// The key of a character with modifiers ([`KeyParts::mods`]), as SPEC
+/// §10.4 names it: a capital is `shift` with its letter, the space bar is
+/// `space`, and `shift` is in any other character already (`!`, not
+/// `shift+!`).
+pub fn char_key(mut mods: u8, c: &str) -> String {
     if mods & SHIFT != 0 && !is_letter(c) && c != " " {
         mods &= !SHIFT;
     }
@@ -945,6 +969,35 @@ impl Platform {
             .clone()
             .unwrap_or_else(|| default_edit(self.modifier))
     }
+
+    // The edit shortcuts as a keymap.
+    fn edit_keymap(&self) -> Keymap {
+        let mut m = Keymap::new(self.modifier, false);
+        for (a, keys) in self.edit_shortcuts() {
+            for k in keys {
+                m.bind(&k, &a);
+            }
+        }
+        m
+    }
+
+    /// The edit action whose shortcut a key is (SPEC §10.2, §10.6): the
+    /// key's own, or, for a key with `shift` that is not a character and
+    /// that no shortcut names, the key's without it, as a keymap reads it.
+    pub fn edit_action(&self, key: &str) -> Option<String> {
+        self.edit_keymap()
+            .bound(&parse_key(key)?)
+            .map(str::to_string)
+    }
+
+    /// The edit action whose shortcut a press is, by either of its names
+    /// (canonical, the physical one first, SPEC §10.4): for a host that
+    /// sees the key itself.
+    pub fn edit_press(&self, names: &[String]) -> Option<String> {
+        let m = self.edit_keymap();
+        let name = names.iter().find(|n| m.binds(n))?;
+        m.bound(&parse_key(name)?).map(str::to_string)
+    }
 }
 
 /// The Platform of a host's capabilities (SDK.md §3.10): its `mod` and its
@@ -1181,6 +1234,18 @@ impl Keymap {
     /// the other one otherwise.
     pub fn binds(&self, key: &str) -> bool {
         parse_key(key).is_some_and(|k| self.bound(&k).is_some())
+    }
+
+    /// Which of a press's names (canonical, the physical one first, SPEC
+    /// §10.4) to ask the keymap of: the first it binds ([`Keymap::binds`]),
+    /// else the first a field does something with ([`Keymap::lookup`]); for
+    /// a host that sees the key itself.
+    pub fn press<'a>(&self, names: &'a [String]) -> Option<&'a str> {
+        names
+            .iter()
+            .find(|n| self.binds(n))
+            .or_else(|| names.iter().find(|n| self.lookup(n).is_some()))
+            .map(String::as_str)
     }
 
     /// What a field with this keymap does with a key: an action; [`INSERT`]

@@ -26,15 +26,21 @@
 //!
 //! # The SDK layer
 //!
-//! - [`Link`] is the program's side of the conversation, sans I/O: it is
+//! - [`link::Link`] is the program's side of the conversation, sans I/O: it is
 //!   handed what the terminal sends and the time, and routes replies to
 //!   what waits for them (SDK.md §4.1, §4.2).
-//! - [`Terminal`] is a [`Link`] on the process's terminal, for a program
+//! - [`Terminal`] is a [`link::Link`] on the process's terminal, for a program
 //!   that prints documents and exits, asks a question, or streams a chart
 //!   (SDK.md §4.1). Feature `term`, Unix.
 //! - [`Session`] keeps a full-screen program's surfaces on screen as its
 //!   frames change, for a UI framework's adapter (SDK.md §4.3). The
 //!   `hotty-ratatui` crate is one.
+//!
+//! # The host's side
+//!
+//! [`host`] is what a host or a relay reads of a program's output and
+//! writes back: the output split, a program's commands read and checked,
+//! and replies and events written.
 //!
 //! # Names
 //!
@@ -44,7 +50,9 @@
 //! - `Do` and `Type` of a [`Field`] are [`Field::do_action`] and
 //!   [`Field::type_text`];
 //! - the builders' result is a [`Cmd`], since [`Command`] is a `command`
-//!   event's detail.
+//!   event's detail;
+//! - [`Link`] is a clicked link, as in hotty-go, and the SDK layer's link
+//!   is [`link::Link`].
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod base64;
@@ -54,6 +62,7 @@ mod decoder;
 mod detector;
 mod encode;
 pub mod field;
+pub mod host;
 pub mod keys;
 pub mod link;
 mod messages;
@@ -74,7 +83,6 @@ pub use keys::{
     INSERT, Keymap, Mod, Platform, TERMINAL_KEYS, decode_keys, default_edit, key_text, parse_key,
     parse_keymap, platform_of, read_key, resolve,
 };
-pub use link::Link;
 pub use messages::*;
 pub use names::{surface_name, valid_name};
 pub use scanner::{SCAN_MAX, Scanner, Segment};

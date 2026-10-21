@@ -40,8 +40,15 @@ pub struct Decoder {
     /// (SPEC §13).
     pub max: usize,
     invalid: usize,
+    why: &'static str,
     pending: Option<Pending>,
 }
+
+/// Why a chunked message was dropped when another arrived before its last
+/// chunk (SPEC §3.4).
+pub(crate) const INTERRUPTED: &str = "a chunked message cut short by another";
+
+const TOO_LARGE: &str = "a message past the decoder's max";
 
 // A chunked message in progress: its control and its base64 so far, or,
 // once it passed max, nothing, its chunks dropped as they come.
@@ -115,6 +122,27 @@ impl Decoder {
         self.invalid
     }
 
+    /// Why the last malformed message it counted was malformed, for a log:
+    /// empty before the first.
+    pub fn why(&self) -> &'static str {
+        self.why
+    }
+
+    /// Drops a chunked message in progress, if there is one, counting it
+    /// malformed: for a caller that dropped one of its sequences itself.
+    pub fn abort(&mut self) {
+        if let Some(p) = self.pending.take()
+            && !p.over
+        {
+            self.count(INTERRUPTED);
+        }
+    }
+
+    fn count(&mut self, why: &'static str) {
+        self.invalid += 1;
+        self.why = why;
+    }
+
     fn limit(&self) -> usize {
         if self.max > 0 { self.max } else { DEFAULT_MAX }
     }
@@ -136,17 +164,17 @@ impl Decoder {
             .or_else(|| rest.strip_suffix(b"\x07"))
             .unwrap_or(rest);
         let Some(text) = rest.strip_prefix(b";") else {
-            return self.bad();
+            return self.bad("no control");
         };
         if !text.is_ascii() {
-            return self.bad();
+            return self.bad("a byte outside ASCII");
         }
         let (ctl, b64) = match text.iter().position(|&b| b == b';') {
             Some(i) => (&text[..i], &text[i + 1..]),
             None => (text, &text[text.len()..]),
         };
         let Some(control) = parse_control(ctl) else {
-            return self.bad();
+            return self.bad("a malformed control");
         };
 
         if control.len() == 1 && control.has("m") {
@@ -155,14 +183,14 @@ impl Decoder {
         if let Some(p) = self.pending.take() {
             // Another message before the last chunk aborts the one in progress.
             if !p.over {
-                self.invalid += 1;
+                self.count(INTERRUPTED);
             }
         }
         match control.get("m") {
             Some("1") => {
                 let over = b64.len() > encoded_max(self.limit());
                 if over {
-                    self.invalid += 1;
+                    self.count(TOO_LARGE);
                 }
                 self.pending = Some(Pending {
                     control,
@@ -172,13 +200,16 @@ impl Decoder {
                 Fed::Partial
             }
             None | Some("0") => self.finish(control, b64),
-            Some(_) => self.bad(),
+            Some(_) => self.bad("an m other than 0 or 1"),
         }
     }
 
     fn continuation(&mut self, more: bool, m: Option<&str>, b64: &[u8]) -> Fed {
-        if !matches!(m, Some("0" | "1")) || self.pending.is_none() {
-            return self.bad();
+        if !matches!(m, Some("0" | "1")) {
+            return self.bad("an m other than 0 or 1");
+        }
+        if self.pending.is_none() {
+            return self.bad("a chunk with no message in progress");
         }
         let limit = encoded_max(self.limit());
         let p = self.pending.as_mut().expect("a message in progress");
@@ -187,6 +218,7 @@ impl Decoder {
             p.b64 = Vec::new();
             p.over = true;
             self.invalid += 1;
+            self.why = TOO_LARGE;
         }
         if !p.over {
             p.b64.extend_from_slice(b64);
@@ -203,13 +235,13 @@ impl Decoder {
 
     // A malformed message: it aborts a chunked one in progress, which makes
     // two (SPEC §3.7).
-    fn bad(&mut self) -> Fed {
+    fn bad(&mut self, why: &'static str) -> Fed {
         if let Some(p) = self.pending.take()
             && !p.over
         {
-            self.invalid += 1;
+            self.count(INTERRUPTED);
         }
-        self.invalid += 1;
+        self.count(why);
         Fed::Invalid
     }
 
@@ -217,25 +249,28 @@ impl Decoder {
     // inflating stops past it.
     fn finish(&mut self, mut control: Control, b64: &[u8]) -> Fed {
         let max = self.limit();
-        let mut payload = if b64.len() > encoded_max(max) {
-            None
-        } else {
-            base64::decode(b64)
+        if b64.len() > encoded_max(max) {
+            self.count(TOO_LARGE);
+            return Fed::Invalid;
+        }
+        let Some(mut payload) = base64::decode(b64) else {
+            self.count("a payload that is not base64");
+            return Fed::Invalid;
         };
         if control.get("o") == Some("z") {
-            payload = payload.and_then(|p| inflate(&p, max));
+            let Some(p) = inflate(&payload, max) else {
+                self.count("a payload zlib cannot inflate");
+                return Fed::Invalid;
+            };
+            payload = p;
         }
-        match payload {
-            Some(p) if p.len() <= max => {
-                control.remove("m");
-                control.remove("o");
-                Fed::Complete(Message::new(control, p))
-            }
-            _ => {
-                self.invalid += 1;
-                Fed::Invalid
-            }
+        if payload.len() > max {
+            self.count(TOO_LARGE);
+            return Fed::Invalid;
         }
+        control.remove("m");
+        control.remove("o");
+        Fed::Complete(Message::new(control, payload))
     }
 }
 

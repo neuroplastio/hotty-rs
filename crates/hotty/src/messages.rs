@@ -314,8 +314,10 @@ pub struct Event {
     pub count: Option<u32>,
     /// Which elements are in view: a `view`'s.
     pub view: Option<View>,
-    pub(crate) command: Option<Command>,
-    pub(crate) changed: Option<Caps>,
+    /// A `command`'s detail (SPEC §10.6, §10.7), as [`Event::command`] reads it.
+    pub command: Option<Command>,
+    /// A `caps` event's capabilities that changed, as [`Event::changed`] reads them.
+    pub changed: Option<Caps>,
     /// The event as it came: an event of a kind this SDK does not know has its detail in the payload.
     pub message: Message,
 }
