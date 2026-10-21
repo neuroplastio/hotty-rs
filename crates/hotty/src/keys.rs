@@ -411,6 +411,21 @@ impl KeyParts {
         }
     }
 
+    /// Whether `super` is held.
+    pub fn super_(&self) -> bool {
+        self.mods & SUPER != 0
+    }
+
+    /// Whether `ctrl` is held.
+    pub fn ctrl(&self) -> bool {
+        self.mods & CTRL != 0
+    }
+
+    /// Whether `alt` is held.
+    pub fn alt(&self) -> bool {
+        self.mods & ALT != 0
+    }
+
     /// Whether `shift` is held.
     pub fn shift(&self) -> bool {
         self.mods & SHIFT != 0
