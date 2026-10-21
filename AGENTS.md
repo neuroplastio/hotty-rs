@@ -27,6 +27,15 @@ grow them.
   `term`) and unicode-segmentation, nothing else; base64 and msgpack are its
   own. `hotty-ratatui` adds ratatui-core, ratatui-crossterm and
   signal-hook.
+- **hotty-ratatui reads the terminal itself.** crossterm's reader takes a
+  host's replies for keys, so the session cuts hotty's sequences out and
+  parses the rest into crossterm's events (`input.rs`, written from the
+  protocols: gov P-7, no code copied from crossterm). Its `Backend` asks for
+  the cursor through the session, because ratatui's `Terminal::clear` asks.
+- **Felt test on a real host**: xterm-addon-hotty's `serve.py` runs a
+  program on a pty in xterm.js with the addon (`python3 serve.py --port
+  8791 -- target/debug/examples/board`), and Playwright's Chromium drives
+  the page. The unit tests use fake hosts over pipes.
 - **Write as the sibling SDKs do**: doc comments say what a thing is and
   does for the program, with the SPEC or SDK.md section; no comments that
   narrate the code.

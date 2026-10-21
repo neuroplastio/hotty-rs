@@ -34,3 +34,11 @@ serde_json = { workspace = true, features = ["preserve_order", "arbitrary_precis
 
 [lints]
 workspace = true
+
+[[example]]
+name = "hello"
+required-features = ["term"]
+
+[[example]]
+name = "progress"
+required-features = ["term"]

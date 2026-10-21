@@ -136,7 +136,6 @@ fn on_a_host_a_surface_goes_out_with_its_frame() {
         [format!("doc {card}"), format!("place {card}")]
     );
     let raw = String::from_utf8_lossy(&host.raw.lock().unwrap()).to_string();
-    assert!(raw.contains("\x1b[?2026h"), "the frame is synchronized");
     assert!(
         raw.contains("\x1b7\x1b[4;3H\x1b]7279;a=place"),
         "placed where it rendered"

@@ -12,8 +12,10 @@ use crate::Session;
 /// What a ratatui backend writes to, on the session's terminal: it watches
 /// the frames on their way out (an erase or a scroll drops placements,
 /// SPEC §5.4), and appends the session's commands to each frame, in the same
-/// write, in synchronized output (SPEC §6.3), so that a placement lands with
-/// the cells around it.
+/// write, so that a placement lands with the cells around it. It adds no
+/// synchronized output of its own (SDK.md §4.2): a program that wants its
+/// frames in it brackets them, and a host that holds commands until the
+/// batch ends must still place each at the cursor it came with.
 #[derive(Debug)]
 pub struct Writer {
     session: Session,
@@ -43,11 +45,7 @@ impl Write for Writer {
             return Ok(());
         }
         let mut out = std::mem::take(&mut self.buf);
-        if !cmds.is_empty() {
-            out.splice(0..0, b"\x1b[?2026h".iter().copied());
-            out.extend_from_slice(cmds.as_bytes());
-            out.extend_from_slice(b"\x1b[?2026l");
-        }
+        out.extend_from_slice(cmds.as_bytes());
         self.session.inner.term.write(&out)
     }
 }
