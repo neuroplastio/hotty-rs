@@ -68,7 +68,7 @@ pub use commands::*;
 pub use control::Control;
 pub use decoder::{Decoder, Fed};
 pub use detector::{DETECT_AFTER_DA1, DETECT_AFTER_REPLY, DETECT_TIMEOUT, Detector, State};
-pub use encode::{clean_value, encode};
+pub use encode::{PREFIX, ST, clean_value, encode, encode_plain};
 pub use field::Field;
 pub use keys::{
     INSERT, Keymap, Mod, Platform, TERMINAL_KEYS, decode_keys, default_edit, key_text, parse_key,
@@ -77,7 +77,7 @@ pub use keys::{
 pub use link::Link;
 pub use messages::*;
 pub use names::{surface_name, valid_name};
-pub use scanner::{Scanner, Segment};
+pub use scanner::{SCAN_MAX, Scanner, Segment};
 pub use session::Session;
 #[cfg(all(unix, feature = "term"))]
 pub use term::Terminal;
