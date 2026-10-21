@@ -160,6 +160,7 @@ impl fmt::Debug for Want<'_> {
 
 /// What the Session tells the program.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // passed now and then, not stored in bulk
 pub enum SessionMessage {
     /// Detection decided, once; again, native, when a late answer comes.
     Ready {

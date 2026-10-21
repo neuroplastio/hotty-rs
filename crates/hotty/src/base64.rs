@@ -26,6 +26,7 @@ pub(crate) fn encode(bytes: &[u8]) -> String {
 }
 
 /// How many base64 bytes `n` bytes take, padded.
+#[cfg(test)]
 pub(crate) fn encoded_len(n: usize) -> usize {
     n.div_ceil(3) * 4
 }

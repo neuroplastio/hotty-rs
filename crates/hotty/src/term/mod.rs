@@ -5,9 +5,10 @@
 //! ```no_run
 //! use hotty::{Placement, Terminal};
 //!
+//! # fn main() -> std::io::Result<()> {
 //! let Ok(t) = Terminal::open("hello") else {
 //!     println!("Hello."); // no terminal: a pipe, a cron job
-//!     return;
+//!     return Ok(());
 //! };
 //! if t.detect() {
 //!     t.line_start(); // surfaces are placed at the cursor
@@ -16,7 +17,8 @@
 //! } else {
 //!     println!("Hello."); // a terminal that is not a host, or not of this version
 //! }
-//! # Ok::<(), std::io::Error>(())
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Everything the terminal sends is read once, by the Terminal, on a thread
@@ -495,12 +497,22 @@ impl Terminal {
         }
     }
 
+    /// Asks where the cursor is (CPR), and returns its column and row from
+    /// 0, 1 s at most: through the Terminal, which reads the answer out of
+    /// the input, where asking another way would race it.
+    pub fn cursor_position(&self) -> Result<(u32, u32), Error> {
+        match self.call(Link::cursor_position)? {
+            Answer::Cursor { row, col } => Ok((col, row)),
+            other => unreachable!("the cursor's position answered {other:?}"),
+        }
+    }
+
     /// Moves the cursor to the start of a line, where a surface placed at
     /// the cursor belongs: it asks where the cursor is (CPR), and writes CR
     /// LF if it is not at column 0. A terminal that does not answer within
     /// 1 s is taken to be at one.
     pub fn line_start(&self) {
-        if let Ok(Answer::Cursor { col, .. }) = self.call(Link::cursor_position)
+        if let Ok((col, _)) = self.cursor_position()
             && col > 0
         {
             let _ = self.write(b"\r\n");
@@ -585,14 +597,28 @@ impl Terminal {
     /// they are typed) until the guard is dropped. Calls that wait for the
     /// terminal do this for themselves; a program that reads keys holds one.
     /// In raw mode `\n` does not return the carriage: write `\r\n`.
-    pub fn raw(&self) -> RawGuard<'_> {
+    pub fn raw(&self) -> RawGuard {
         self.shared
             .raw
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .depth += 1;
         self.shared.sync_raw(true);
-        RawGuard(self)
+        RawGuard(self.shared.clone())
+    }
+
+    /// Wakes whatever waits in [`Terminal::wait`] or
+    /// [`Terminal::next_input`], as input arriving would: for an adapter
+    /// that learns of something else, such as a resize.
+    pub fn wake(&self) {
+        self.shared.lock().seen += 1;
+        self.shared.cond.notify_all();
+    }
+
+    /// Whether the input has ended, or the terminal is closed.
+    pub fn ended(&self) -> bool {
+        let st = self.shared.lock();
+        st.link.ended() || st.link.closed()
     }
 
     /// The terminal's size in cells, or 80 × 24 when it cannot be told.
@@ -680,11 +706,11 @@ impl Drop for Terminal {
 
 /// Raw mode, held until dropped: [`Terminal::raw`].
 #[must_use = "raw mode ends when the guard is dropped"]
-pub struct RawGuard<'a>(&'a Terminal);
+pub struct RawGuard(Arc<Shared>);
 
-impl Drop for RawGuard<'_> {
+impl Drop for RawGuard {
     fn drop(&mut self) {
-        let s = &self.0.shared;
+        let s = &self.0;
         {
             let mut raw = s.raw.lock().unwrap_or_else(|e| e.into_inner());
             raw.depth = raw.depth.saturating_sub(1);
@@ -694,7 +720,7 @@ impl Drop for RawGuard<'_> {
     }
 }
 
-impl fmt::Debug for RawGuard<'_> {
+impl fmt::Debug for RawGuard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("RawGuard")
     }

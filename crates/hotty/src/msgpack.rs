@@ -80,6 +80,7 @@ impl Writer {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn float(&mut self, v: f64) {
         self.out.push(0xcb);
         self.out.extend(v.to_be_bytes());

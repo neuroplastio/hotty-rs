@@ -4,7 +4,6 @@ mod common;
 mod wire;
 
 use hotty::{Decoder, Detector, Fed, State};
-use serde_json::Value;
 
 fn state(s: State) -> &'static str {
     match s {

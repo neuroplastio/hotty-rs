@@ -66,6 +66,7 @@ pub struct Known {
 
 /// What arrives that no call waits for, in the order it arrived.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // passed now and then, not stored in bulk
 pub enum Input {
     /// A hotty message: an event, or a reply nothing waits for.
     Message(Message),
@@ -102,6 +103,7 @@ pub struct Ticket(u64);
 
 /// What a waiting call got.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // passed now and then, not stored in bulk
 pub enum Answer {
     /// A request's reply, ok or an error.
     Reply(Reply),
