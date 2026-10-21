@@ -1,0 +1,69 @@
+# CI: make check (rustfmt, the build, the tests with the conformance vectors,
+# clippy, the docs with no broken links, and the wire layer without default
+# features) on Linux and macOS, with neuroplastio/hotty checked out beside,
+# so the test that compares the vectors' copy with the spec's runs; and the
+# workspace built with the Rust its rust-version names.
+#
+# GitHub's hosted runners: the repository is public. Never a self-hosted
+# runner here, since a pull request from anyone would run its code on it.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: make check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The terminal is Unix's: /dev/tty and termios.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      HOTTY_DIR: ${{ github.workspace }}/.hotty
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: neuroplastio/hotty
+          path: .hotty
+      # Rust, with clippy and rustfmt, as mise.toml pins it.
+      - uses: jdx/mise-action@v4
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'mise.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - run: make check
+
+  msrv:
+    name: builds with Rust 1.88, the rust-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: msrv-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: msrv-${{ runner.os }}-
+      - name: rust-version
+        run: |
+          v=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          mise install "rust@$v"
+          mise x "rust@$v" -- cargo build --workspace --all-targets

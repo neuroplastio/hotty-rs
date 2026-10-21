@@ -8,7 +8,10 @@ grow them.
 
 - **`make check` is the gate**: rustfmt, the build, the tests (the
   conformance vectors among them), clippy with `-D warnings`, the docs with
-  no broken links, and the wire layer without default features.
+  no broken links, and the wire layer without default features. CI
+  (`.github/workflows/ci.yml`) runs it on Linux and macOS against the
+  spec's vectors, and builds with the `rust-version` (1.88): a change that
+  needs newer Rust raises it in `Cargo.toml`, deliberately.
 - **The vectors are the contract.** `crates/hotty/tests/testdata/vectors.json`
   is a copy, refreshed with `make vectors`, and a test fails when it falls
   behind the spec's (a hotty checkout next to this repository, or
