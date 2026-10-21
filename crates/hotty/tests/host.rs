@@ -649,3 +649,219 @@ fn a_press_is_asked_by_the_name_the_keymap_binds() {
     );
     assert_eq!(p.edit_action("ctrl+c"), None);
 }
+
+// --- what hotty-blitz's hotty-wire checked of its scanner, kept -------------
+
+/// A tiny deterministic PRNG, so the property tests need no dependency.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        self.0 >> 33
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
+}
+
+/// Everything a splitter hands on, flattened: the bytes passed on (a
+/// sequence's included), the sequences, the commands and the drops.
+#[derive(Default)]
+struct Collected {
+    bytes: Vec<u8>,
+    seqs: Vec<Seq>,
+    commands: Vec<Message>,
+    invalid: Vec<&'static str>,
+}
+
+fn collect(s: &mut Splitter, pieces: impl Iterator<Item = Vec<u8>>) -> Collected {
+    let mut out = Collected::default();
+    for p in pieces {
+        s.feed(&p, &mut |o| match o {
+            Output::Bytes(b) => out.bytes.extend_from_slice(b),
+            Output::Seq(q, b) => {
+                out.bytes.extend_from_slice(b);
+                out.seqs.push(q);
+            }
+            Output::Command(m) => out.commands.push(m),
+            Output::Invalid(w) => out.invalid.push(w),
+        });
+    }
+    out
+}
+
+// Fed in random pieces of 1 to 40 bytes.
+fn split_randomly(input: &[u8], rng: &mut Lcg) -> Collected {
+    let mut pieces = Vec::new();
+    let mut i = 0;
+    while i < input.len() {
+        let n = 1 + rng.below(40.min(input.len() - i));
+        pieces.push(input[i..i + n].to_vec());
+        i += n;
+    }
+    collect(&mut Splitter::new(), pieces.into_iter())
+}
+
+/// Random terminal output that holds no hotty command.
+fn noise(rng: &mut Lcg, len: usize) -> Vec<u8> {
+    let pieces: [&[u8]; 14] = [
+        b"hello ",
+        "héllo wörld Ü ".as_bytes(),
+        b"\x1b[1;31m",
+        b"\x1b[0m",
+        b"\x1b]0;title\x07",
+        b"\x1b]8;;https://x.y\x1b\\",
+        b"\x1b]72791;not ours\x07",
+        b"\x1b]72;t=a:i=1\x1b\\",
+        b"\x1bP1$r0m\x1b\\",
+        b"\x1b_Ga=q,i=1;AAAA\x1b\\",
+        b"\x1b[?25l",
+        b"\x1b[H\x1b[2J",
+        b"\r\n",
+        b"\x1b\x1b[A",
+    ];
+    let mut out = Vec::new();
+    while out.len() < len {
+        if rng.below(4) == 0 {
+            out.push((rng.below(95) + 32) as u8);
+        } else {
+            out.extend_from_slice(pieces[rng.below(pieces.len())]);
+        }
+    }
+    out
+}
+
+#[test]
+fn what_is_not_hottys_passes_byte_exact_however_it_is_split() {
+    let mut rng = Lcg(7);
+    for round in 0..300 {
+        let input = noise(&mut rng, 50 + round * 3);
+        let got = split_randomly(&input, &mut rng);
+        assert_eq!(got.bytes, input, "round {round}");
+        assert!(got.commands.is_empty());
+        assert!(got.invalid.is_empty(), "{:?}", got.invalid);
+    }
+}
+
+#[test]
+fn commands_come_out_whole_among_noise_however_it_is_split() {
+    let mut rng = Lcg(42);
+    let big: String = (0..5000)
+        .map(|i| format!("<div id=r{i}>row {i}</div>"))
+        .collect();
+    let random_big: Vec<u8> = (0..20000).map(|_| rng.next() as u8).collect();
+    let commands = [
+        msg(&[("a", "q"), ("n", "1")], b""),
+        msg(
+            &[("a", "doc"), ("s", "main")],
+            "<p>héllo</p>\n<pre>a\n\tb</pre>".as_bytes(),
+        ),
+        msg(&[("a", "doc"), ("s", "big")], big.as_bytes()),
+        msg(
+            &[
+                ("a", "res"),
+                ("id", "blob"),
+                ("type", "application/octet-stream"),
+            ],
+            &random_big,
+        ),
+    ];
+    for round in 0..40 {
+        let (mut input, mut passed) = (Vec::new(), Vec::new());
+        for c in &commands {
+            let n = noise(&mut rng, 30);
+            input.extend_from_slice(&n);
+            passed.extend_from_slice(&n);
+            input.extend_from_slice(encode(&c.control, &c.payload).as_bytes());
+        }
+        let got = split_randomly(&input, &mut rng);
+        assert!(got.invalid.is_empty(), "round {round}: {:?}", got.invalid);
+        assert_eq!(got.bytes, passed, "round {round}");
+        assert_eq!(got.commands, commands, "round {round}");
+    }
+}
+
+#[test]
+fn bel_ends_a_command_and_the_sequences_a_host_acts_on_are_said() {
+    let input = b"\x1b[?1049h\x1b[?2026;1000l\x1b]7279;a=q:n=9\x07\x1b[2J\x1bcdone";
+    let got = split_randomly(input, &mut Lcg(1));
+    assert_eq!(got.commands, [msg(&[("a", "q"), ("n", "9")], b"")]);
+    assert_eq!(
+        got.seqs,
+        [
+            Seq::PrivateMode {
+                set: true,
+                modes: vec![1049]
+            },
+            Seq::PrivateMode {
+                set: false,
+                modes: vec![2026, 1000]
+            },
+            Seq::EraseDisplay(2),
+            Seq::Reset,
+        ]
+    );
+    assert_eq!(got.bytes, b"\x1b[?1049h\x1b[?2026;1000l\x1b[2J\x1bcdone");
+}
+
+fn with_max(input: &[u8], max: usize) -> Collected {
+    collect(
+        &mut Splitter::with_max(max),
+        std::iter::once(input.to_vec()),
+    )
+}
+
+#[test]
+fn the_limit_is_on_decoded_bytes() {
+    for (n, ok) in [(4096, true), (4097, false)] {
+        let cmd = res("x", "application/octet-stream", &vec![0u8; n]);
+        let got = with_max(encode_plain(&cmd.control(), cmd.payload()).as_bytes(), 4096);
+        assert_eq!(got.commands.len(), usize::from(ok), "{n} bytes");
+        assert_eq!(got.invalid.len(), usize::from(!ok), "{n} bytes");
+    }
+}
+
+#[cfg(feature = "zlib")]
+#[test]
+fn zlib_past_the_limit_is_refused_not_cut_short() {
+    let cmd = res("x", "application/octet-stream", &[0; 4096]);
+    let packed = encode(&cmd.control(), cmd.payload());
+    assert!(packed.contains("o=z"));
+    assert_eq!(
+        with_max(packed.as_bytes(), 4096).commands[0].payload.len(),
+        4096
+    );
+    let got = with_max(packed.as_bytes(), 4095);
+    assert!(got.commands.is_empty());
+    assert_eq!(got.invalid.len(), 1);
+}
+
+#[test]
+fn a_chunked_command_past_the_limit_is_dropped_whole_and_said_once() {
+    let chunk = "A".repeat(400);
+    let mut input = format!("\x1b]7279;a=doc:s=x:m=1;{chunk}\x1b\\");
+    for _ in 0..5 {
+        input += &format!("\x1b]7279;m=1;{chunk}\x1b\\");
+    }
+    input += &format!("\x1b]7279;m=0;{chunk}\x1b\\\x1b]7279;a=del:s=x\x1b\\");
+    let got = with_max(input.as_bytes(), 1024);
+    assert_eq!(got.invalid.len(), 1, "{:?}", got.invalid);
+    assert_eq!(got.commands, [msg(&[("a", "del"), ("s", "x")], b"")]);
+    assert!(got.bytes.is_empty());
+}
+
+#[test]
+fn the_chunks_after_one_too_large_to_hold_are_dropped_too() {
+    let mut input = b"\x1b]7279;a=doc:s=x:m=1;".to_vec();
+    input.extend(std::iter::repeat_n(b'A', 8000));
+    input.extend_from_slice(b"\x1b\\\x1b]7279;m=1;AAAA\x1b\\\x1b]7279;m=0;AAAA\x1b\\");
+    input.extend_from_slice(b"\x1b]7279;a=del:s=x\x1b\\");
+    let got = with_max(&input, 1024);
+    assert_eq!(got.invalid, ["hotty command too large"]);
+    assert_eq!(got.commands, [msg(&[("a", "del"), ("s", "x")], b"")]);
+}

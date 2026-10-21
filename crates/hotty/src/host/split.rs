@@ -71,6 +71,9 @@ pub struct Splitter {
     pending: Vec<u8>,
     ours: Vec<u8>,
     decoder: Decoder,
+    // A chunked command one of whose sequences was too large to hold: its
+    // further chunks are dropped, unreported, up to its last.
+    dropping: bool,
 }
 
 impl Default for Splitter {
@@ -94,6 +97,7 @@ impl Splitter {
             pending: Vec::with_capacity(32),
             ours: Vec::new(),
             decoder: Decoder::with_max(max),
+            dropping: false,
         }
     }
 
@@ -234,6 +238,9 @@ impl Splitter {
                                 // dropped up to its end, and a chunked
                                 // command it belongs to with it.
                                 sink(Output::Invalid("hotty command too large"));
+                                let ctl = self.ours.split(|&b| b == b';').next().unwrap_or(&[]);
+                                self.dropping = ctl.split(|&b| b == b':').any(|kv| kv == b"m=1")
+                                    || is_continuation(ctl);
                                 self.ours = Vec::new();
                                 self.decoder.abort();
                                 self.state = State::Discard;
@@ -314,6 +321,15 @@ impl Splitter {
     // A whole hotty sequence: to the Decoder, which joins its chunks and
     // decodes it. Each message it drops is reported once.
     fn finish(&mut self, sink: &mut dyn FnMut(Output<'_>)) {
+        if self.dropping {
+            let ctl = self.ours.split(|&b| b == b';').next().unwrap_or(&[]);
+            if is_continuation(ctl) {
+                self.dropping = ctl == b"m=1";
+                self.ours.clear();
+                return;
+            }
+            self.dropping = false;
+        }
         let mut seq = Vec::with_capacity(PREFIX.len() + self.ours.len());
         seq.extend_from_slice(PREFIX);
         seq.append(&mut self.ours);
@@ -330,6 +346,11 @@ impl Splitter {
             sink(Output::Command(m));
         }
     }
+}
+
+// A chunk's control that carries only `m` (SPEC §3.4).
+fn is_continuation(ctl: &[u8]) -> bool {
+    ctl == b"m=0" || ctl == b"m=1"
 }
 
 fn flush(sink: &mut dyn FnMut(Output<'_>), bytes: &[u8]) {
