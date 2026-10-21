@@ -1,0 +1,10 @@
+# hotty-rs's docs, as hotty.neuroplast.io/docs/ shows them (gov NEIO-14):
+# the README as the SDK's page, among the protocol's and the other SDKs',
+# and the guides in this directory under it.
+name: hotty-rs
+description: hotty for Rust programs, ratatui's among them, and for hosts
+readme:
+  group: Reference
+  order: 60
+  nav: hotty-rs
+  path: hotty-rs

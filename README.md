@@ -19,6 +19,27 @@ another hotty version is no host to it, and the program draws in cells.
 
 0.4.x speaks hotty 0.4; the patch number is this repository's own.
 
+## Install
+
+hotty-rs isn't on crates.io yet. Depend on it from GitHub, and pin a
+commit for builds you can reproduce:
+
+```toml
+[dependencies]
+hotty = { git = "https://github.com/neuroplastio/hotty-rs" }
+hotty-ratatui = { git = "https://github.com/neuroplastio/hotty-rs" }  # with ratatui 0.30
+```
+
+It needs Rust 1.88 or later; its terminal is Unix's.
+
+## Guides
+
+- [Quick start](docs/quickstart.md): a program that prints HTML, changes
+  it in place, and hears the user, with `hotty` alone.
+- [hotty in a ratatui program](docs/ratatui.md): surfaces as widgets, and
+  crossterm's events beside hotty's.
+- [A host or a relay](docs/host.md): the other side of the wire.
+
 ## A program that prints
 
 ```rust
@@ -124,12 +145,19 @@ use hotty::host::{Output, Splitter, delta_of, reply_err};
 
 let mut split = Splitter::new();
 split.feed(&program_output, &mut |o| match o {
-    Output::Bytes(b) => terminal.write(b),          // to the cells, as it is
-    Output::Seq(seq, b) => { on_mode(&seq); terminal.write(b) } // the alternate screen, a reset…
+    // To the cells, as they are.
+    Output::Bytes(b) => terminal.write(b),
+    // The alternate screen, a reset, …: the host acts, then passes on.
+    Output::Seq(seq, b) => {
+        on_mode(&seq);
+        terminal.write(b)
+    }
     Output::Command(cmd) => match cmd.action() {
-        "delta" => match delta_of(&cmd) {          // checked whole first (SPEC §6.1)
+        // Checked whole before any op applies (SPEC §6.1).
+        "delta" => match delta_of(&cmd) {
             Ok(ops) => apply(ops),
-            Err(e) => reply(reply_err(&cmd, &e)),   // EINVAL, and the op at fault
+            // EINVAL, and the index of the op at fault.
+            Err(e) => reply(reply_err(&cmd, &e)),
         },
         _ => {}
     },
