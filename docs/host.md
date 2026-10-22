@@ -54,7 +54,9 @@ split.feed(&program_output, &mut |o| match o {
   document; **`control_kind`** and **`field_fits`** say whether the target
   is a control and the change's fields are for it (SPEC §6.4). A
   select's option, `rev` (`ESTALE`) and then the positions are the
-  host's: a stale command is `ESTALE` whatever its positions.
+  host's: a stale command is `ESTALE` whatever its positions, and one
+  that is not is `EINVAL` when a position is negative, past the end, or
+  inside a code point.
 - **`quiet_of`** says how much of a reply a command asks for, and
   **`speaks`** whether a query lists the version this SDK speaks.
 

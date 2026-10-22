@@ -323,17 +323,17 @@ pub fn placement_of(m: &Message) -> Result<Placement, Error> {
 /// `from` or `to` not an int, `checked` not a bool, or `sel` not two ints
 /// (a float among them); no field but `rev` is there; `value` comes with
 /// `text`, `from` or `to`; `from` or `to` comes without the other, or
-/// without `text`; `from` is past `to`; or a position is under 0. A key
-/// the table does not name is dropped. What needs the target is the
-/// host's: whether it is a control and the fields fit it
-/// ([`field_fits`]), a select's option, its `rev` (`ESTALE`), and last the
-/// positions within its value. When more than one error holds, the answer
-/// is the first of `EDETACHED`, `ENOTARGET`, `EINVAL` and `ESTALE`, so a
-/// host answers a detached surface and a missing element before it calls
-/// this. Positions count bytes of the value the program heard, so a host
-/// checks them only when the command is not stale: a stale one is
-/// `ESTALE` whatever its positions (`EINVAL` past the end of the value or
-/// inside a code point otherwise).
+/// without `text`; or `from` is past `to`. A key the table does not name
+/// is dropped. What needs the target is the host's: whether it is a
+/// control and the fields fit it ([`field_fits`]), a select's option, its
+/// `rev` (`ESTALE`), and last the positions. When more than one error
+/// holds, the answer is the first of `EDETACHED`, `ENOTARGET`, `EINVAL`
+/// and `ESTALE`, so a host answers a detached surface and a missing
+/// element before it calls this. Positions count bytes of the value the
+/// program heard, so a host checks them only when the command is not
+/// stale: a stale one is `ESTALE` whatever its positions, and one that is
+/// not is `EINVAL` when a position is negative, past the end of the value,
+/// or inside a code point.
 pub fn field_of(m: &Message) -> Result<FieldChange, Error> {
     if m.get("t").is_none_or(str::is_empty) {
         return Err(invalid(m, "field needs t=<element id>", None));
@@ -389,10 +389,6 @@ pub fn field_of(m: &Message) -> Result<FieldChange, Error> {
             && from > to
         {
             return Err("from is past to".to_string());
-        }
-        let positions = [c.from, c.to, sel.map(|s| s.0), sel.map(|s| s.1)];
-        if positions.into_iter().flatten().any(|p| p < 0) {
-            return Err("a position is under 0".to_string());
         }
         Ok(c)
     };

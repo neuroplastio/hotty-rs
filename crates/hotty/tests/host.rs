@@ -208,6 +208,20 @@ fn a_field_change_reads_back() {
             checked: Some(false),
             ..FieldChange::default()
         },
+        // A negative position is the host's to refuse, after rev (SPEC
+        // §6.4): a stale command is ESTALE whatever its positions.
+        FieldChange {
+            rev: 3,
+            from: Some(-1),
+            to: Some(0),
+            text: Some("x".into()),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            rev: 0,
+            sel: Some((0, -1)),
+            ..FieldChange::default()
+        },
     ];
     for c in changes {
         assert_eq!(field_of(&command(set_field("find", "q", &c))).unwrap(), c);
@@ -261,10 +275,6 @@ fn a_field_change_that_needs_no_document_to_refuse_is_einval() {
             from: Some(2),
             to: Some(1),
             text: text("y"),
-            ..FieldChange::default()
-        },
-        FieldChange {
-            sel: Some((-1, 0)),
             ..FieldChange::default()
         },
     ];

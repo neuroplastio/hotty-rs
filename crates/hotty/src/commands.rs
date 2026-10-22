@@ -571,7 +571,9 @@ pub fn reveal(surface: &str, target: &str, where_: &str) -> Cmd {
 /// A change to a control (SPEC §6.4), made against its revision: what
 /// [`set_field`] sends. Each field but `rev` is absent unless given, so an
 /// empty `value` or `text` and a position 0 are sent. Positions count the
-/// bytes of the value's UTF-8.
+/// bytes of the value's UTF-8. A `textarea` makes each CR LF pair and each
+/// lone CR in `value` or `text` one LF, and `sel` counts the bytes after
+/// that.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FieldChange {
     /// The control's `rev` the change is made against: the last an `input`,
