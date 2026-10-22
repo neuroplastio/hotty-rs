@@ -232,7 +232,7 @@ impl From<Query> for String {
 
 /// Asks whether the terminal is a hotty host that speaks
 /// [`VERSION`](crate::VERSION), fenced by Primary Device Attributes (SPEC §4):
-/// `a=q:n=<n>:v=0.4`, then `ESC [ c`. A host replies to the query, numbered
+/// `a=q:n=<n>:v=0.5`, then `ESC [ c`. A host replies to the query, numbered
 /// `n`, before the DA1 answer every terminal sends: its capabilities, or
 /// `EVERSION` when it speaks no version the query lists. A
 /// [`Detector`](crate::Detector) sends it and reads the answers.
@@ -566,6 +566,84 @@ pub fn morph_to(surface: &str, target: &str, html: &str) -> Cmd {
 /// `""` for the nearest.
 pub fn reveal(surface: &str, target: &str, where_: &str) -> Cmd {
     delta(surface, &[reveal_op(target, where_)])
+}
+
+/// A change to a control (SPEC §6.4), made against its revision: what
+/// [`set_field`] sends. Each field but `rev` is absent unless given, so an
+/// empty `value` or `text` and a position 0 are sent. Positions count the
+/// bytes of the value's UTF-8.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FieldChange {
+    /// The control's `rev` the change is made against: the last an `input`,
+    /// `change` or `caret` carried ([`Event::rev`](crate::Event::rev)).
+    pub rev: i64,
+    /// The new value: of any control but a checkbox or a radio button.
+    pub value: Option<String>,
+    /// The start of the range `text` replaces, in a text field.
+    pub from: Option<i64>,
+    /// The end of the range `text` replaces.
+    pub to: Option<i64>,
+    /// Text that replaces the selection, or `from` to `to`, in a text field.
+    pub text: Option<String>,
+    /// The selection after the change, in a text field: its anchor, then
+    /// its caret.
+    pub sel: Option<(i64, i64)>,
+    /// Whether a checkbox or a radio button is checked.
+    pub checked: Option<bool>,
+}
+
+/// The body [`set_field`] sends: one msgpack map of `rev` and the fields
+/// given, in the order of [`FieldChange`]'s.
+fn field_body(c: &FieldChange) -> Vec<u8> {
+    let n = 1
+        + usize::from(c.value.is_some())
+        + usize::from(c.from.is_some())
+        + usize::from(c.to.is_some())
+        + usize::from(c.text.is_some())
+        + usize::from(c.sel.is_some())
+        + usize::from(c.checked.is_some());
+    let mut w = Writer::new();
+    w.map(n);
+    w.str("rev");
+    w.int(c.rev);
+    if let Some(v) = &c.value {
+        w.kv_str("value", v);
+    }
+    for (k, v) in [("from", c.from), ("to", c.to)] {
+        if let Some(v) = v {
+            w.str(k);
+            w.int(v);
+        }
+    }
+    if let Some(t) = &c.text {
+        w.kv_str("text", t);
+    }
+    if let Some((anchor, caret)) = c.sel {
+        w.str("sel");
+        w.array(2);
+        w.int(anchor);
+        w.int(caret);
+    }
+    if let Some(b) = c.checked {
+        w.str("checked");
+        w.bool(b);
+    }
+    w.finish()
+}
+
+/// Changes what the user changes in a control (SPEC §6.4): its value, the
+/// text in a range, its selection, whether it is checked; focused or not.
+/// The host changes it only if its `rev` is still `change.rev`, and
+/// otherwise answers `ESTALE` with the control's `rev`: the user changed it
+/// first, and the program decides again from the event it hears next. It
+/// sends no `input` or `change`. Answered on error, so that a stale change
+/// is heard. It checks nothing: the host does.
+pub fn set_field(surface: &str, target: &str, change: &FieldChange) -> Cmd {
+    Cmd::new(
+        Control::from([("a", "field"), ("s", surface), ("t", target)]),
+        field_body(change),
+        Quiet::ReplyOnError,
+    )
 }
 
 /// Stores a resource that documents refer to as `cid:<id>` (SPEC §7.1).

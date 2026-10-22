@@ -14,7 +14,7 @@ use ratatui::crossterm::event::{Event as Input, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::widgets::Paragraph;
 
-const CAPS_04: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'4'];
+const CAPS_05: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'5'];
 
 struct Host {
     commands: Arc<Mutex<Vec<Control>>>,
@@ -64,7 +64,7 @@ impl Host {
                                 cmds.lock().unwrap().push(m.control.clone());
                                 if m.action() == "q" {
                                     let c = Control::from([("a", "ok"), ("n", "1"), ("re", "q")]);
-                                    encode_plain(&c, CAPS_04).into_bytes()
+                                    encode_plain(&c, CAPS_05).into_bytes()
                                 } else {
                                     Vec::new()
                                 }

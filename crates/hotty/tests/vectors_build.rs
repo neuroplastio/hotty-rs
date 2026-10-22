@@ -140,6 +140,22 @@ fn build(name: &str, a: &Value, o: &Value, q_first: bool) -> String {
         "remove_attr" => cmd(remove_attr(s(a, "surface"), s(a, "target"), s(a, "name"))),
         "morph_to" => cmd(morph_to(s(a, "surface"), s(a, "target"), s(a, "html"))),
         "reveal" => cmd(reveal(s(a, "surface"), s(a, "target"), s(a, "where"))),
+        "set_field" => {
+            let c = &a["change"];
+            let int = |k: &str| c[k].as_i64();
+            let change = FieldChange {
+                rev: int("rev").unwrap(),
+                value: c["value"].as_str().map(str::to_string),
+                from: int("from"),
+                to: int("to"),
+                text: c["text"].as_str().map(str::to_string),
+                sel: c["sel"]
+                    .as_array()
+                    .map(|p| (p[0].as_i64().unwrap(), p[1].as_i64().unwrap())),
+                checked: c["checked"].as_bool(),
+            };
+            cmd(set_field(s(a, "surface"), s(a, "target"), &change))
+        }
         "res" => cmd(res(s(a, "id"), s(a, "mime"), s(a, "data").as_bytes())),
         "del_res" => cmd(del_res(s(a, "id"))),
         "del" => cmd(del(s(a, "surface"))),

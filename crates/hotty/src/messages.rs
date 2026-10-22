@@ -101,6 +101,12 @@ impl Message {
         if k == "change" {
             e.checked = d.and_then(|d| d.get("checked")).and_then(Value::as_bool);
         }
+        if matches!(k, "change" | "input" | "caret") {
+            e.rev = int_of("rev");
+        }
+        if matches!(k, "input" | "caret") {
+            e.sel = d.and_then(|d| body::sel(d.get("sel")?));
+        }
         if k == "submit" {
             e.fields = d.and_then(|d| body::fields(d.get("fields")?));
         }
@@ -294,6 +300,13 @@ pub struct Event {
     pub value: Option<String>,
     /// `checked`: a `change`'s of a checkbox or radio button.
     pub checked: Option<bool>,
+    /// `rev`: the control's revision (SPEC §6.4), a `change`'s, `input`'s
+    /// or `caret`'s, which [`set_field`](crate::set_field) sends back.
+    pub rev: Option<i64>,
+    /// `sel`: the selection, its anchor then its caret, in bytes of the
+    /// value's UTF-8 (SPEC §6.4): an `input`'s with `data-on~=caret`, and
+    /// a `caret`'s.
+    pub sel: Option<(i64, i64)>,
     /// `fields`: a `submit`'s, the pairs of a name and a value, in order (SPEC §9).
     pub fields: Option<Vec<(String, String)>>,
     /// `mods`: the modifier bits ([`MOD_SHIFT`](crate::MOD_SHIFT), …), 0 when absent.
@@ -428,7 +441,7 @@ pub struct CellCss {
 /// ([`Event::changed`]). Each field is `None` when the host did not send it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Caps {
-    /// The protocol version the host answers in: `"0.4"`, for a host this SDK uses.
+    /// The protocol version the host answers in: `"0.5"`, for a host this SDK uses.
     pub v: Option<String>,
     /// A cell's size in CSS pixels (`cellcss`).
     pub cell_css: Option<CellCss>,
@@ -458,7 +471,7 @@ pub struct Caps {
 
 impl Caps {
     /// Whether the host has an optional feature (SPEC §4): `passthrough`,
-    /// `hover`, `count` or `menu`. Everything else a 0.4 host does.
+    /// `hover`, `count` or `menu`. Everything else a 0.5 host does.
     pub fn has(&self, feature: &str) -> bool {
         self.features
             .as_deref()
@@ -597,8 +610,9 @@ mod body {
                 ("count", Int),
             ]),
             "press" => &Map(&[("area", AREA), ("mods", Int)]),
-            "change" => &Map(&[("checked", Bool), ("value", Str)]),
-            "input" => &Map(&[("value", Str)]),
+            "change" => &Map(&[("checked", Bool), ("value", Str), ("rev", Int)]),
+            "input" => &Map(&[("value", Str), ("rev", Int), ("sel", Array(&Int))]),
+            "caret" => &Map(&[("sel", Array(&Int)), ("rev", Int)]),
             "submit" => &Map(&[("fields", Array(&STRS))]),
             "fit" => &Map(&[("r", Int)]),
             "dragstart" | "drag" | "dragend" => &DRAG,
@@ -652,6 +666,14 @@ mod body {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A selection, its anchor then its caret: absent unless it is two ints.
+    pub(super) fn sel(v: &Value) -> Option<(i64, i64)> {
+        match v.as_array()? {
+            [anchor, caret] => Some((anchor.as_int()?, caret.as_int()?)),
+            _ => None,
+        }
     }
 
     /// An element's cells: absent unless the map has all of c, r, w and h.

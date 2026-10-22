@@ -268,8 +268,8 @@ fn the_quiet_level_is_the_wires() {
     assert_eq!(q(&[("a", "doc"), ("n", "3"), ("q", "2")]), Quiet::NoReply);
     assert_eq!(q(&[("a", "doc"), ("q", "7")]), Quiet::ReplyOnError);
     assert!(speaks(&command(query(1))));
-    assert!(speaks(&msg(&[("a", "q"), ("v", "0.3,0.4")], b"")));
-    assert!(!speaks(&msg(&[("a", "q"), ("v", "0.3")], b"")));
+    assert!(speaks(&msg(&[("a", "q"), ("v", "0.4,0.5")], b"")));
+    assert!(!speaks(&msg(&[("a", "q"), ("v", "0.4")], b"")));
 }
 
 // --- a host's replies and events ---------------------------------------------

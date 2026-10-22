@@ -4,10 +4,10 @@ use hotty::link::Link;
 use hotty::session::{Mode, Rect, Session, SessionMessage, Want};
 use hotty::{Control, encode_plain};
 
-const CAPS_04: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'4'];
-// {"v": "0.4", "limits": {"surfaces": 2}}
+const CAPS_05: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'5'];
+// {"v": "0.5", "limits": {"surfaces": 2}}
 const CAPS_LIMIT_2: &[u8] = &[
-    0x82, 0xa1, b'v', 0xa3, b'0', b'.', b'4', 0xa6, b'l', b'i', b'm', b'i', b't', b's', 0x81, 0xa8,
+    0x82, 0xa1, b'v', 0xa3, b'0', b'.', b'5', 0xa6, b'l', b'i', b'm', b'i', b't', b's', 0x81, 0xa8,
     b's', b'u', b'r', b'f', b'a', b'c', b'e', b's', 0x02,
 ];
 
@@ -35,7 +35,7 @@ fn native_with(caps: &[u8]) -> (Session, Link) {
 }
 
 fn native() -> (Session, Link) {
-    native_with(CAPS_04)
+    native_with(CAPS_05)
 }
 
 fn want(name: &str, x: i32, y: i32) -> Want<'static> {

@@ -69,6 +69,8 @@ fn event_json(e: &Event) -> Value {
         "target": e.target,
         "value": opt(e.value.clone()),
         "checked": opt(e.checked),
+        "rev": opt(e.rev),
+        "sel": opt(e.sel.map(|(anchor, caret)| json!([anchor, caret]))),
         "fields": opt(e.fields.as_ref().map(|f| {
             f.iter().map(|(n, v)| json!([n, v])).collect::<Vec<_>>()
         })),

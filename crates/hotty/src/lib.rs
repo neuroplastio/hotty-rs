@@ -99,7 +99,7 @@ pub const MAX_SIZE: u32 = 1000;
 /// The longest surface name (SPEC §5).
 pub const MAX_NAME: usize = 64;
 /// The protocol version this SDK speaks, which its query lists (SPEC §4).
-pub const VERSION: &str = "0.4";
+pub const VERSION: &str = "0.5";
 /// The most bytes a [`Decoder`] decodes one message to unless its `max`
 /// says otherwise (SDK.md §3.6): 16 MiB.
 pub const DEFAULT_MAX: usize = 16 << 20;
@@ -127,6 +127,9 @@ pub mod kind {
     pub const CHANGE: &str = "change";
     /// An edit of a control with `data-on~=input`.
     pub const INPUT: &str = "input";
+    /// The user moved the selection of a text field with `data-on~=caret`,
+    /// and no `input` says so (SPEC §9).
+    pub const CARET: &str = "caret";
     /// A form was submitted; the detail is its fields.
     pub const SUBMIT: &str = "submit";
     /// A press anywhere in a placement made with `press`.
@@ -153,9 +156,9 @@ pub mod kind {
     /// A capability changed (SPEC §4). It belongs to no surface.
     pub const CAPS: &str = "caps";
     /// Every kind this SDK knows, in SPEC §9's order.
-    pub const ALL: [&str; 15] = [
-        CLICK, CHANGE, INPUT, SUBMIT, PRESS, FOCUS, BLUR, FIT, HOVER, VIEW, DRAG_START, DRAG,
-        DRAG_END, COMMAND, CAPS,
+    pub const ALL: [&str; 16] = [
+        CLICK, CHANGE, INPUT, CARET, SUBMIT, PRESS, FOCUS, BLUR, FIT, HOVER, VIEW, DRAG_START,
+        DRAG, DRAG_END, COMMAND, CAPS,
     ];
 }
 
@@ -188,11 +191,15 @@ pub mod code {
     pub const EQUOTA: &str = "EQUOTA";
     /// The host gave up on work over its time budget.
     pub const EBUDGET: &str = "EBUDGET";
+    /// An `a=field` made against a revision the control has passed, or
+    /// while an input method composes in it; the detail is the control's
+    /// revision, in decimal (SPEC §6.4).
+    pub const ESTALE: &str = "ESTALE";
     /// A query lists no version the host speaks; the detail is those it speaks (SPEC §4).
     pub const EVERSION: &str = "EVERSION";
     /// Every code this SDK knows.
-    pub const ALL: [&str; 7] = [
-        EINVAL, ENOENT, ENOTARGET, EDETACHED, EQUOTA, EBUDGET, EVERSION,
+    pub const ALL: [&str; 8] = [
+        EINVAL, ENOENT, ENOTARGET, EDETACHED, EQUOTA, EBUDGET, ESTALE, EVERSION,
     ];
 }
 
