@@ -190,6 +190,12 @@ fn area(w: &mut Writer, a: &Area) {
     }
 }
 
+fn sel(w: &mut Writer, (anchor, caret): (i64, i64)) {
+    w.array(2);
+    int(w, anchor);
+    int(w, caret);
+}
+
 // A map of the fields that are there, each written by its function.
 type Field<'a> = (&'static str, Box<dyn Fn(&mut Writer) + 'a>);
 
@@ -249,9 +255,24 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
             vec![
                 e.checked.and_then(|c| some("checked", move |w| w.bool(c))),
                 str_field("value", &e.value),
+                int_field("rev", e.rev),
             ],
         ),
-        kind::INPUT => fields(&mut w, vec![str_field("value", &e.value)]),
+        kind::INPUT => fields(
+            &mut w,
+            vec![
+                str_field("value", &e.value),
+                int_field("rev", e.rev),
+                e.sel.and_then(|s| some("sel", move |w| sel(w, s))),
+            ],
+        ),
+        kind::CARET => {
+            let s = e.sel?;
+            fields(
+                &mut w,
+                vec![some("sel", move |w| sel(w, s)), int_field("rev", e.rev)],
+            );
+        }
         kind::SUBMIT => {
             // A submit always has its fields, none included (SPEC §9).
             let pairs = e.fields.clone().unwrap_or_default();

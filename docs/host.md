@@ -47,10 +47,13 @@ split.feed(&program_output, &mut |o| match o {
   erase in display, a full reset) with their bytes, and hotty's commands,
   their chunks joined and decoded. `with_max` sets the most a command
   decodes to, which the host reports as `limits.message`.
-- **`delta_of`, `menu_of`, `menu_show_of`, `touch_of`, `placement_of`**
-  read a command as SPEC has a host read it, and refuse one it would
-  refuse, with the `EINVAL` to answer: the detail, and for a delta the
-  index of the op at fault.
+- **`delta_of`, `field_of`, `menu_of`, `menu_show_of`, `touch_of`,
+  `placement_of`** read a command as SPEC has a host read it, and refuse
+  one it would refuse, with the `EINVAL` to answer: the detail, and for a
+  delta the index of the op at fault. `field_of` checks what needs no
+  document; **`control_kind`** and **`field_fits`** say whether the target
+  is a control and the change's fields are for it (SPEC §6.4). The
+  positions, a select's option and `rev` (`ESTALE`) are the host's.
 - **`quiet_of`** says how much of a reply a command asks for, and
   **`speaks`** whether a query lists the version this SDK speaks.
 

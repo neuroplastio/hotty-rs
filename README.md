@@ -168,9 +168,10 @@ split.feed(&program_output, &mut |o| match o {
 - `Splitter` cuts a program's output into the bytes to pass on, the
   control sequences a host acts on (private modes, erase in display, a
   full reset) with their bytes, and hotty's commands, decoded.
-- `delta_of`, `menu_of`, `menu_show_of`, `touch_of` and `placement_of` read
-  a command as SPEC has a host read it, and refuse one with the `EINVAL` to
-  answer; `quiet_of` and `speaks` say what to answer.
+- `delta_of`, `field_of`, `menu_of`, `menu_show_of`, `touch_of` and
+  `placement_of` read a command as SPEC has a host read it, and refuse one
+  with the `EINVAL` to answer; `control_kind` and `field_fits` say whether
+  an `a=field` fits its target; `quiet_of` and `speaks` say what to answer.
 - `reply_ok`, `reply_err`, `reply_query` and `encode_event` write what a
   host sends, each body typed as SPEC §3.3 types it. A relay that re-names
   an event's surface passes its detail on as it came.

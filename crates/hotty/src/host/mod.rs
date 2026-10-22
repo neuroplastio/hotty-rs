@@ -4,9 +4,11 @@
 //!
 //! - [`Splitter`] cuts a program's output into the bytes to pass on, the
 //!   control sequences a host acts on, and hotty's commands, decoded.
-//! - [`delta_of`], [`menu_of`], [`menu_show_of`], [`touch_of`] and
-//!   [`placement_of`] read a command as SPEC has a host read it, and refuse
-//!   one it would refuse with the `EINVAL` to answer.
+//! - [`delta_of`], [`field_of`], [`menu_of`], [`menu_show_of`],
+//!   [`touch_of`] and [`placement_of`] read a command as SPEC has a host
+//!   read it, and refuse one it would refuse with the `EINVAL` to answer;
+//!   [`control_kind`] and [`field_fits`] say whether an `a=field` fits its
+//!   target.
 //! - [`reply_ok`], [`reply_err`], [`reply_query`] and [`encode_event`]
 //!   write what a host sends, each body typed as SPEC §3.3 types it.
 //!
@@ -32,7 +34,8 @@ mod split;
 mod write;
 
 pub use read::{
-    cursor_below, delta_of, menu_of, menu_show_of, placement_of, quiet_of, speaks, touch_of,
+    ControlKind, control_kind, cursor_below, delta_of, field_fits, field_of, menu_of, menu_show_of,
+    placement_of, quiet_of, speaks, touch_of,
 };
 pub use split::{Output, Seq, Splitter};
 pub use write::{

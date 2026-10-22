@@ -1,7 +1,8 @@
 //! A program's commands, as a host or a relay reads them.
 
 use crate::commands::{
-    MENU_DEPTH, MenuItem, MenuTree, Op, Placement, Quiet, TOUCH_MAX, TouchArea, TouchDrag, Window,
+    FieldChange, MENU_DEPTH, MenuItem, MenuTree, Op, Placement, Quiet, TOUCH_MAX, TouchArea,
+    TouchDrag, Window,
 };
 use crate::messages::{Error, Message};
 use crate::msgpack::{self, Value};
@@ -314,6 +315,156 @@ pub fn placement_of(m: &Message) -> Result<Placement, Error> {
         hover: flag("v"),
         keep_cursor: m.get("C") == Some("1"),
     })
+}
+
+/// Reads `a=field`'s change (SPEC §6.4), with the checks that need no
+/// document. It is `EINVAL` when the command has no `t`; the body does not
+/// decode or is no map; `rev` is missing; `value` or `text` is not a str,
+/// `from` or `to` not an int, `checked` not a bool, or `sel` not two ints
+/// (a float among them); no field but `rev` is there; `value` comes with
+/// `text`, `from` or `to`; `from` or `to` comes without the other, or
+/// without `text`; `from` is past `to`; or a position is under 0. A key
+/// the table does not name is dropped. What needs the target is the
+/// host's: whether it is a control and the fields fit it
+/// ([`field_fits`]), the positions within its value, a select's option,
+/// and its `rev` (`ESTALE`). When more than one error holds, the answer is
+/// the first of `EDETACHED`, `ENOTARGET`, `EINVAL` and `ESTALE`, so a host
+/// answers a detached surface and a missing element before it calls this.
+pub fn field_of(m: &Message) -> Result<FieldChange, Error> {
+    if m.get("t").is_none_or(str::is_empty) {
+        return Err(invalid(m, "field needs t=<element id>", None));
+    }
+    let Some(root) = map_of(m) else {
+        return Err(invalid(m, "the field's body does not decode", None));
+    };
+    let read = || -> Result<FieldChange, String> {
+        let str_of = |k: &str| match root.get(k) {
+            None => Ok(None),
+            Some(Value::Str(s)) => Ok(Some(s.clone())),
+            Some(_) => Err(format!("{k} is not a str")),
+        };
+        let int_of = |k: &str| match root.get(k) {
+            None => Ok(None),
+            Some(Value::Int(i)) => Ok(Some(*i)),
+            Some(_) => Err(format!("{k} is not an int")),
+        };
+        let rev = int_of("rev")?.ok_or("rev is missing")?;
+        let sel = match root.get("sel") {
+            None => None,
+            Some(Value::Array(a)) => match a.as_slice() {
+                [Value::Int(anchor), Value::Int(caret)] => Some((*anchor, *caret)),
+                _ => return Err("sel is not two ints".to_string()),
+            },
+            Some(_) => return Err("sel is not two ints".to_string()),
+        };
+        let checked = match root.get("checked") {
+            None => None,
+            Some(Value::Bool(b)) => Some(*b),
+            Some(_) => return Err("checked is not a bool".to_string()),
+        };
+        let c = FieldChange {
+            rev,
+            value: str_of("value")?,
+            from: int_of("from")?,
+            to: int_of("to")?,
+            text: str_of("text")?,
+            sel,
+            checked,
+        };
+        let range = c.from.is_some() || c.to.is_some();
+        if c.value.is_none() && c.text.is_none() && !range && sel.is_none() && checked.is_none() {
+            return Err("no field but rev".to_string());
+        }
+        if c.value.is_some() && (c.text.is_some() || range) {
+            return Err("value comes with text, from or to".to_string());
+        }
+        if range && (c.from.is_none() || c.to.is_none() || c.text.is_none()) {
+            return Err("from and to come together, with text".to_string());
+        }
+        if let (Some(from), Some(to)) = (c.from, c.to)
+            && from > to
+        {
+            return Err("from is past to".to_string());
+        }
+        let positions = [c.from, c.to, sel.map(|s| s.0), sel.map(|s| s.1)];
+        if positions.into_iter().flatten().any(|p| p < 0) {
+            return Err("a position is under 0".to_string());
+        }
+        Ok(c)
+    };
+    read().map_err(|e| invalid(m, e, None))
+}
+
+/// What `a=field` can change in a control (SPEC §6.4): which of its fields
+/// are for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ControlKind {
+    /// A text field: an `input` of a text type, a `textarea`. `value`,
+    /// `text`, `from`, `to` and `sel`.
+    Text,
+    /// A checkbox or a radio button: `checked`.
+    Check,
+    /// A `select`: `value`, one of its options'.
+    Select,
+    /// Any other `input`: a range, a date, a colour. `value`.
+    Other,
+}
+
+/// The kind of control an element is (SPEC §6.4, §10.2), by its tag name
+/// and its `type`, as the document has them: `None` when it is no control,
+/// an `input` of type `hidden`, `button`, `submit`, `reset`, `image` or
+/// `file` among them. An `input` of a type the host does not know is a
+/// text field.
+pub fn control_kind(tag: &str, input_type: Option<&str>) -> Option<ControlKind> {
+    if tag.eq_ignore_ascii_case("textarea") {
+        return Some(ControlKind::Text);
+    }
+    if tag.eq_ignore_ascii_case("select") {
+        return Some(ControlKind::Select);
+    }
+    if !tag.eq_ignore_ascii_case("input") {
+        return None;
+    }
+    let t = input_type.unwrap_or("text").trim().to_ascii_lowercase();
+    Some(match t.as_str() {
+        "hidden" | "button" | "submit" | "reset" | "image" | "file" => return None,
+        "checkbox" | "radio" => ControlKind::Check,
+        "range" | "color" | "date" | "time" | "datetime-local" | "month" | "week" => {
+            ControlKind::Other
+        }
+        _ => ControlKind::Text,
+    })
+}
+
+/// Whether each field of `change` is for a control of `kind` (SPEC §6.4's
+/// table): `EINVAL` when one is not, `checked` on a text field or `sel` on
+/// a range among them.
+pub fn field_fits(m: &Message, change: &FieldChange, kind: ControlKind) -> Result<(), Error> {
+    let text = change.text.is_some() || change.from.is_some() || change.sel.is_some();
+    let fits = match kind {
+        ControlKind::Text => change.checked.is_none(),
+        ControlKind::Check => change.value.is_none() && !text,
+        ControlKind::Select | ControlKind::Other => change.checked.is_none() && !text,
+    };
+    if fits {
+        return Ok(());
+    }
+    let field = [
+        (
+            "value",
+            change.value.is_some() && kind == ControlKind::Check,
+        ),
+        ("text", change.text.is_some() && kind != ControlKind::Text),
+        ("sel", change.sel.is_some() && kind != ControlKind::Text),
+        (
+            "checked",
+            change.checked.is_some() && kind != ControlKind::Check,
+        ),
+    ]
+    .into_iter()
+    .find_map(|(k, wrong)| wrong.then_some(k))
+    .unwrap_or("a field");
+    Err(invalid(m, format!("{field} is not for this control"), None))
 }
 
 /// The cursor's move a placement without `C=1` makes (SPEC §5.2): `rows`

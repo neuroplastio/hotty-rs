@@ -8,8 +8,9 @@ mod wire;
 use std::collections::BTreeMap;
 
 use hotty::host::{
-    Output, Seq, Splitter, cursor_below, delta_of, encode_event, menu_of, menu_show_of,
-    placement_of, quiet_of, reply_caps, reply_err, reply_ok, reply_query, speaks, touch_of,
+    ControlKind, Output, Seq, Splitter, control_kind, cursor_below, delta_of, encode_event,
+    field_fits, field_of, menu_of, menu_show_of, placement_of, quiet_of, reply_caps, reply_err,
+    reply_ok, reply_query, speaks, touch_of,
 };
 use hotty::keys::{KeyParts, Kind, Mod, Platform, SHIFT, char_key, parse_keymap};
 use hotty::*;
@@ -184,6 +185,158 @@ fn touch_areas_read_back() {
     assert!(touch_of(&command(touch(&[]))).unwrap().is_empty());
     let zero = TouchArea { w: 0, ..areas[0] };
     assert!(touch_of(&command(touch(&[zero]))).is_err());
+}
+
+#[test]
+fn a_field_change_reads_back() {
+    let changes = [
+        FieldChange {
+            rev: 2,
+            from: Some(0),
+            to: Some(2),
+            text: Some("src/".into()),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            rev: 0,
+            value: Some(String::new()),
+            sel: Some((3, 0)),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            rev: 7,
+            checked: Some(false),
+            ..FieldChange::default()
+        },
+    ];
+    for c in changes {
+        assert_eq!(field_of(&command(set_field("find", "q", &c))).unwrap(), c);
+    }
+}
+
+#[test]
+fn a_field_change_that_needs_no_document_to_refuse_is_einval() {
+    let field = |payload: &[u8]| msg(&[("a", "field"), ("s", "x"), ("t", "q")], payload);
+    let bodies: [&[u8]; 6] = [
+        b"",
+        b"\x91\x00",                                               // [0]
+        b"\x81\xa5value\xa1x",                                     // {"value": "x"}
+        b"\x82\xa3rev\xa10\xa5value\xa1x",                         // {"rev": "0", "value": "x"}
+        b"\x82\xa3rev\x00\xa3sel\x91\x01",                         // {"rev": 0, "sel": [1]}
+        b"\x82\xa3rev\x00\xa3sel\x92\x00\xcb\x3f\xf0\0\0\0\0\0\0", // {"rev": 0, "sel": [0, 1.0]}
+    ];
+    for b in bodies {
+        let e = field_of(&field(b)).unwrap_err();
+        assert_eq!(
+            (e.code.as_str(), e.re.as_str()),
+            (code::EINVAL, "field"),
+            "{b:?}"
+        );
+    }
+    let text = |t: &str| Some(t.to_string());
+    let changes = [
+        FieldChange::default(),
+        FieldChange {
+            value: text("x"),
+            text: text("y"),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            value: text("x"),
+            from: Some(0),
+            to: Some(0),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            from: Some(0),
+            text: text("y"),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            from: Some(0),
+            to: Some(1),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            from: Some(2),
+            to: Some(1),
+            text: text("y"),
+            ..FieldChange::default()
+        },
+        FieldChange {
+            sel: Some((-1, 0)),
+            ..FieldChange::default()
+        },
+    ];
+    for c in changes {
+        assert!(
+            field_of(&command(set_field("x", "q", &c))).is_err(),
+            "{c:?}"
+        );
+    }
+    let no_t = msg(
+        &[("a", "field"), ("s", "x")],
+        b"\x82\xa3rev\x00\xa5value\xa1x",
+    );
+    assert_eq!(field_of(&no_t).unwrap_err().code, code::EINVAL);
+}
+
+#[test]
+fn a_field_fits_its_control_or_is_einval() {
+    assert_eq!(control_kind("input", None), Some(ControlKind::Text));
+    assert_eq!(
+        control_kind("INPUT", Some("Email")),
+        Some(ControlKind::Text)
+    );
+    assert_eq!(
+        control_kind("input", Some("whatever")),
+        Some(ControlKind::Text)
+    );
+    assert_eq!(control_kind("textarea", None), Some(ControlKind::Text));
+    assert_eq!(
+        control_kind("input", Some("radio")),
+        Some(ControlKind::Check)
+    );
+    assert_eq!(control_kind("select", None), Some(ControlKind::Select));
+    assert_eq!(
+        control_kind("input", Some("range")),
+        Some(ControlKind::Other)
+    );
+    assert_eq!(control_kind("input", Some("submit")), None);
+    assert_eq!(control_kind("p", None), None);
+    let m = msg(&[("a", "field"), ("s", "x"), ("t", "q")], b"");
+    let value = FieldChange {
+        value: Some("x".into()),
+        ..FieldChange::default()
+    };
+    let sel = FieldChange {
+        sel: Some((0, 0)),
+        ..FieldChange::default()
+    };
+    let checked = FieldChange {
+        checked: Some(true),
+        ..FieldChange::default()
+    };
+    let text = FieldChange {
+        text: Some("a".into()),
+        ..FieldChange::default()
+    };
+    use ControlKind::*;
+    for (c, kind, fits) in [
+        (&value, Text, true),
+        (&sel, Text, true),
+        (&text, Text, true),
+        (&checked, Text, false),
+        (&checked, Check, true),
+        (&value, Check, false),
+        (&sel, Check, false),
+        (&value, Select, true),
+        (&text, Select, false),
+        (&value, Other, true),
+        (&sel, Other, false),
+    ] {
+        assert_eq!(field_fits(&m, c, kind).is_ok(), fits, "{c:?} {kind:?}");
+    }
 }
 
 #[test]
