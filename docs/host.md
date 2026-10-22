@@ -52,8 +52,9 @@ split.feed(&program_output, &mut |o| match o {
   one it would refuse, with the `EINVAL` to answer: the detail, and for a
   delta the index of the op at fault. `field_of` checks what needs no
   document; **`control_kind`** and **`field_fits`** say whether the target
-  is a control and the change's fields are for it (SPEC §6.4). The
-  positions, a select's option and `rev` (`ESTALE`) are the host's.
+  is a control and the change's fields are for it (SPEC §6.4). A
+  select's option, `rev` (`ESTALE`) and then the positions are the
+  host's: a stale command is `ESTALE` whatever its positions.
 - **`quiet_of`** says how much of a reply a command asks for, and
   **`speaks`** whether a query lists the version this SDK speaks.
 
