@@ -191,6 +191,9 @@ pub mod code {
     pub const EQUOTA: &str = "EQUOTA";
     /// The host gave up on work over its time budget.
     pub const EBUDGET: &str = "EBUDGET";
+    /// Nothing can lay the document out yet: a multiplexer with no terminal
+    /// attached; the rows come as `fit` (SPEC §5.2).
+    pub const ENOTERM: &str = "ENOTERM";
     /// An `a=field` made against a revision the control has passed, or
     /// while an input method composes in it; the detail is the control's
     /// revision, in decimal (SPEC §6.4).
@@ -198,8 +201,8 @@ pub mod code {
     /// A query lists no version the host speaks; the detail is those it speaks (SPEC §4).
     pub const EVERSION: &str = "EVERSION";
     /// Every code this SDK knows.
-    pub const ALL: [&str; 8] = [
-        EINVAL, ENOENT, ENOTARGET, EDETACHED, EQUOTA, EBUDGET, ESTALE, EVERSION,
+    pub const ALL: [&str; 9] = [
+        EINVAL, ENOENT, ENOTARGET, EDETACHED, EQUOTA, EBUDGET, ENOTERM, ESTALE, EVERSION,
     ];
 }
 
