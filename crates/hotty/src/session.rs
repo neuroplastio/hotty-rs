@@ -189,7 +189,9 @@ pub enum SessionMessage {
         /// so that they reach the host ahead of the document; sending one
         /// again replaces it. One loss is reported once, however many
         /// documents it took: an `ENOENT` for a placement sent before the
-        /// report is taken as the same loss's, and gives a plain relayout.
+        /// report is taken as the same loss's, and gives a plain relayout,
+        /// and a hidden surface's document goes again with its next
+        /// placement.
         lost: bool,
     },
     /// A ping's answer: the terminal took what was written before it,
@@ -453,6 +455,22 @@ impl Session {
             let lost = self.placed_in.get(&s).copied().unwrap_or(0) == self.lost;
             if lost {
                 self.lost += 1;
+                // A host loses its documents together (a full reset, a
+                // restart behind a relay): the hidden ones go again with
+                // their next placement, which would find them gone and
+                // report this loss again. One on the screen answers its own
+                // placement.
+                let placed = &self.placed;
+                let hidden: Vec<String> = self
+                    .has_doc
+                    .iter()
+                    .filter(|n| !placed.contains_key(*n))
+                    .cloned()
+                    .collect();
+                for n in hidden {
+                    self.has_doc.remove(&n);
+                    self.flags.remove(&n);
+                }
             }
             self.forget(&s);
             self.relayout_due = true;

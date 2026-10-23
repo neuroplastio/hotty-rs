@@ -208,6 +208,33 @@ fn a_lost_document_is_sent_again() {
     assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
 }
 
+// A hidden surface brought back after a loss goes with its document, rather
+// than finding it gone and reporting the loss again.
+#[test]
+fn a_hidden_surface_goes_with_its_document_after_a_loss() {
+    let (mut s, mut link) = native();
+    let b = || {
+        let mut w = want("b", 0, 3);
+        w.keep = true;
+        w
+    };
+    s.layout([want("a", 0, 0), b()]);
+    s.flush(&mut link, 10);
+    s.layout([want("a", 0, 0)]);
+    assert_eq!(actions(&s.flush(&mut link, 11)), ["hide b"]);
+    link.bytes(&gone("a"), 12);
+    assert_eq!(
+        s.poll(&mut link, 12),
+        Some(SessionMessage::Relayout { lost: true })
+    );
+    assert!(!s.has("b"), "b's document is taken as kept after the loss");
+    s.layout([want("a", 0, 0), b()]);
+    assert_eq!(
+        actions(&s.flush(&mut link, 13)),
+        ["doc a", "place a", "doc b", "place b"]
+    );
+}
+
 // A host that loses its documents loses them all at once, and the program
 // sends its resources again once: the first ENOENT reports the loss, and
 // one for a placement sent before the report is the same loss's. A
