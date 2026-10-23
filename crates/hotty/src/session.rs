@@ -40,6 +40,15 @@ pub const DEFAULT_LIMIT: usize = 48;
 /// in milliseconds.
 pub const PING_WAIT: u64 = 100;
 
+// Numbers a loss's marks (the Session's `marking`) above any number a
+// program picks for its own commands.
+const MARK_BASE: u64 = 1 << 40;
+
+// How long a mark's answer may take, in milliseconds: past it, the answer
+// is taken as lost with the host that would have sent it, and an ENOENT is
+// a loss again.
+const MARK_TIMEOUT: u64 = 3000;
+
 /// What the terminal turned out to be.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -187,11 +196,11 @@ pub enum SessionMessage {
         /// refers to as well, since a full reset ends the session that
         /// stored them (SPEC §2, §7.1). Send them again before the layout,
         /// so that they reach the host ahead of the document; sending one
-        /// again replaces it. One loss is reported once, however many
-        /// documents it took: an `ENOENT` for a placement sent before the
-        /// report is taken as the same loss's, and gives a plain relayout,
-        /// and a hidden surface's document goes again with its next
-        /// placement.
+        /// again replaces it. A host loses its documents together (a full
+        /// reset, a restart behind a relay), so the next layout sends every
+        /// one again, and one loss is reported once however many it took:
+        /// an `ENOENT` for a placement sent before the documents went again
+        /// is the same loss's, and gives nothing.
         lost: bool,
     },
     /// A ping's answer: the terminal took what was written before it,
@@ -254,11 +263,16 @@ pub struct Session {
     keep: HashMap<String, bool>,
     seen: HashMap<String, u64>,
     refused: BTreeSet<String>,
-    // The losses reported (Relayout's `lost`), and what it was when each
-    // surface was last placed: an ENOENT for a placement sent before the
-    // last report is that loss's.
-    lost: u64,
-    placed_in: HashMap<String, u64>,
+    // A loss reported (Relayout's `lost`) whose late answers may still
+    // come. The first document layout sends again after it is numbered,
+    // mark_n (0 until it goes), on mark_doc, flushed at mark_at: the host
+    // answers in order, so an ENOENT read before that document's answer is
+    // for a placement sent before it (SDK.md §4.3).
+    marking: bool,
+    mark_n: u64,
+    mark_doc: String,
+    mark_at: Option<u64>,
+    marks: u64,
     layouts: u64,
     learned: usize,
     closed: bool,
@@ -374,7 +388,7 @@ impl Session {
                 Input::Host(caps) => self.late_answer(caps),
                 Input::Message(m) => {
                     if let Some(r) = m.reply() {
-                        self.reply(r);
+                        self.reply(r, now);
                     } else if let Some(ev) = m.event() {
                         if ev.kind == crate::kind::CAPS
                             && self.mode == Mode::Native
@@ -419,7 +433,18 @@ impl Session {
         self.flags.remove(s);
     }
 
-    fn reply(&mut self, r: Reply) {
+    fn reply(&mut self, r: Reply, now: u64) {
+        if self.marking
+            && self.mark_n != 0
+            && r.n == Some(self.mark_n)
+            && r.re == "doc"
+            && r.surface.as_deref() == Some(self.mark_doc.as_str())
+        {
+            self.marking = false; // the loss's late answers have all come
+            if r.ok {
+                return;
+            }
+        }
         if r.ok {
             // A command the program numbered; queries are the link's.
             if r.n.is_some() && r.re != "q" {
@@ -447,34 +472,30 @@ impl Session {
         if r.re == "place" && code == code::ENOENT && self.refused.remove(&s) {
             return;
         }
+        if r.re == "place"
+            && code == code::ENOENT
+            && self.marking
+            && (self.mark_n == 0
+                || self
+                    .mark_at
+                    .is_none_or(|at| now.saturating_sub(at) < MARK_TIMEOUT))
+        {
+            // For a placement sent before the documents went again: this
+            // loss's, and its document goes with the rest.
+            return;
+        }
         if r.re == "place" && code == code::ENOENT && self.has_doc.contains(&s) {
             // The host lost the document (a reset, the alternate screen, a
-            // host restarting behind a relay): send both again with the next
-            // layout, and have the program send its resources again, unless
-            // the placement went before the last loss was reported.
-            let lost = self.placed_in.get(&s).copied().unwrap_or(0) == self.lost;
-            if lost {
-                self.lost += 1;
-                // A host loses its documents together (a full reset, a
-                // restart behind a relay): the hidden ones go again with
-                // their next placement, which would find them gone and
-                // report this loss again. One on the screen answers its own
-                // placement.
-                let placed = &self.placed;
-                let hidden: Vec<String> = self
-                    .has_doc
-                    .iter()
-                    .filter(|n| !placed.contains_key(*n))
-                    .cloned()
-                    .collect();
-                for n in hidden {
-                    self.has_doc.remove(&n);
-                    self.flags.remove(&n);
-                }
-            }
-            self.forget(&s);
+            // host restarting behind a relay), and with it the others: send
+            // them all again with the next layout, and have the program send
+            // its resources again.
+            (self.marking, self.mark_n) = (true, 0);
+            self.has_doc.clear();
+            self.placed.clear();
+            self.flags.clear();
             self.relayout_due = true;
-            self.messages.push_back(SessionMessage::Relayout { lost });
+            self.messages
+                .push_back(SessionMessage::Relayout { lost: true });
             return;
         }
         self.messages.push_back(SessionMessage::Error(r));
@@ -512,7 +533,17 @@ impl Session {
                     continue; // the host holds no more: not until one goes
                 }
                 let html = (w.doc)();
-                self.queue(doc(&w.name, &html).scroll(w.scroll));
+                let mut d = doc(&w.name, &html).scroll(w.scroll);
+                if self.marking && self.mark_n == 0 {
+                    // Numbered, it is answered whatever comes of it (SPEC
+                    // §3.5); flush notes when it went.
+                    self.marks += 1;
+                    self.mark_n = MARK_BASE + self.marks;
+                    self.mark_doc = w.name.clone();
+                    self.mark_at = None;
+                    d = d.n(self.mark_n);
+                }
+                self.queue(d);
                 self.counts.docs += 1;
                 self.has_doc.insert(w.name.clone());
                 self.scroll.insert(w.name.clone(), w.scroll);
@@ -556,7 +587,6 @@ impl Session {
                 self.counts.places += 1;
                 self.placed.insert(w.name.clone(), p);
                 self.flags.insert(w.name.clone(), p.flags);
-                self.placed_in.insert(w.name.clone(), self.lost);
             }
         }
         let names: Vec<String> = self.has_doc.iter().cloned().collect();
@@ -629,7 +659,6 @@ impl Session {
         self.scroll.remove(name);
         self.keep.remove(name);
         self.seen.remove(name);
-        self.placed_in.remove(name);
     }
 
     /// Whether the host has a surface's document, on screen or hidden, so
@@ -663,6 +692,9 @@ impl Session {
     pub fn flush(&mut self, link: &mut Link, now: u64) -> String {
         let mut s = std::mem::take(&mut self.out);
         self.sent += s.len();
+        if self.mark_n != 0 && self.mark_at.is_none() {
+            self.mark_at = Some(now); // the mark goes with this frame
+        }
         if self.ping_at.is_some() {
             s.push_str(&self.ping_now(link, now));
         }
@@ -724,16 +756,16 @@ impl Session {
             // too: the next layout sends their documents again. It ends the
             // session that stored the resources as well (SPEC §2), so after
             // documents it is a loss, reported with nothing placed too, in
-            // place of a plain relayout still queued. Before any it says
-            // nothing, or a program that writes one with each frame would
-            // lay out for ever.
+            // place of a plain relayout still queued, and marked as one an
+            // ENOENT reports. Before any it says nothing, or a program that
+            // writes one with each frame would lay out for ever.
             let had = !self.has_doc.is_empty();
             self.has_doc.clear();
             self.flags.clear();
             self.refused.clear();
             if had {
                 self.placed.clear();
-                self.lost += 1;
+                (self.marking, self.mark_n) = (true, 0);
                 self.counts.relayouts += 1;
                 self.relayout_due = true;
                 self.messages

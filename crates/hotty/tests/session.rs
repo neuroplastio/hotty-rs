@@ -58,6 +58,25 @@ fn actions(out: &str) -> Vec<String> {
         .collect()
 }
 
+// The number and surface of the numbered document in what a flush returned:
+// the one that marks a loss.
+fn mark(out: &str) -> Option<(String, String)> {
+    out.split("\x1b]7279;").skip(1).find_map(|m| {
+        let ctl: Vec<&str> = m.split([';', '\x1b']).next()?.split(':').collect();
+        if ctl.first() != Some(&"a=doc") {
+            return None;
+        }
+        let n = ctl.iter().find_map(|kv| kv.strip_prefix("n="))?;
+        let s = ctl.iter().find_map(|kv| kv.strip_prefix("s="))?;
+        Some((n.to_string(), s.to_string()))
+    })
+}
+
+// The host's answer to the document that marks a loss.
+fn marked((n, s): &(String, String)) -> Vec<u8> {
+    reply(&[("a", "ok"), ("n", n), ("s", s), ("re", "doc")], b"")
+}
+
 #[test]
 fn a_new_surface_gets_its_document_and_a_placement_once() {
     let (mut s, mut link) = native();
@@ -151,6 +170,8 @@ fn a_layout_after_the_erase_makes_the_relayout_moot() {
     assert_eq!(s.poll(&mut link, 12), None);
 }
 
+// The documents a full reset took go again, the first numbered as after an
+// ENOENT's loss; its answer is the Session's.
 #[test]
 fn a_full_reset_sends_the_documents_again() {
     let (mut s, mut link) = native();
@@ -162,7 +183,11 @@ fn a_full_reset_sends_the_documents_again() {
         Some(SessionMessage::Relayout { lost: true })
     );
     s.layout([want("a", 0, 0)]);
-    assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
+    let out = s.flush(&mut link, 12);
+    assert_eq!(actions(&out), ["doc a", "place a"]);
+    let m = mark(&out).expect("a's document numbered");
+    link.bytes(&marked(&m), 13);
+    assert_eq!(s.poll(&mut link, 13), None, "the mark's answer");
 }
 
 // A full reset ends the session that stored the resources (SPEC §2), so
@@ -237,9 +262,8 @@ fn a_hidden_surface_goes_with_its_document_after_a_loss() {
 
 // A host that loses its documents loses them all at once, and the program
 // sends its resources again once: the first ENOENT reports the loss, and
-// one for a placement sent before the report is the same loss's. A
-// placement sent after the report that finds its document gone is a loss
-// of its own.
+// every document goes again, the first numbered. An ENOENT read before that
+// one's answer is for a placement sent before it: the same loss's.
 #[test]
 fn a_loss_is_reported_once() {
     let (mut s, mut link) = native();
@@ -251,23 +275,31 @@ fn a_loss_is_reported_once() {
         s.poll(&mut link, 11),
         Some(SessionMessage::Relayout { lost: true })
     );
-    s.layout(all());
-    assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
-    for name in ["b", "c"] {
-        link.bytes(&gone(name), 13);
-        assert_eq!(
-            s.poll(&mut link, 13),
-            Some(SessionMessage::Relayout { lost: false }),
-            "{name}'s ENOENT"
-        );
-    }
-    s.layout(all());
+    link.bytes(&gone("b"), 11);
     assert_eq!(
-        actions(&s.flush(&mut link, 14)),
-        ["doc b", "place b", "doc c", "place c"]
+        s.poll(&mut link, 11),
+        None,
+        "b's ENOENT before the documents went"
     );
-    // They are lost again: the placements after the erase went after the
-    // report.
+    s.layout(all());
+    let out = s.flush(&mut link, 12);
+    assert_eq!(
+        actions(&out),
+        ["doc a", "place a", "doc b", "place b", "doc c", "place c"]
+    );
+    assert_eq!(out.matches(":n=").count(), 1, "documents numbered: {out:?}");
+    let m = mark(&out).expect("a document numbered");
+    assert_eq!(m.1, "a");
+    link.bytes(&gone("c"), 13);
+    assert_eq!(
+        s.poll(&mut link, 13),
+        None,
+        "c's ENOENT before the mark's answer"
+    );
+    link.bytes(&marked(&m), 14);
+    assert_eq!(s.poll(&mut link, 14), None, "the mark's answer");
+    // The placements after the erase went after the mark: a loss of its
+    // own.
     s.watch(b"\x1b[2J");
     assert_eq!(
         s.poll(&mut link, 15),
@@ -285,10 +317,67 @@ fn a_loss_is_reported_once() {
         "a second loss"
     );
     link.bytes(&gone("a"), 18);
+    assert_eq!(s.poll(&mut link, 18), None, "a's ENOENT in the second loss");
+}
+
+// Two frames in flight when the host loses its documents (margin's case,
+// behind a relay): the second frame's ENOENTs come after the documents went
+// again, and before the mark's answer, so they are still the first loss's.
+#[test]
+fn a_loss_behind_two_frames_is_reported_once() {
+    let (mut s, mut link) = native();
+    let at = |y| [want("a", 0, y), want("b", 0, y + 3)];
+    s.layout(at(0));
+    s.flush(&mut link, 10);
+    s.layout(at(1));
+    assert_eq!(actions(&s.flush(&mut link, 11)), ["place a", "place b"]);
+    link.bytes(&gone("a"), 12);
     assert_eq!(
-        s.poll(&mut link, 18),
-        Some(SessionMessage::Relayout { lost: false }),
-        "a's ENOENT in the second loss"
+        s.poll(&mut link, 12),
+        Some(SessionMessage::Relayout { lost: true })
+    );
+    link.bytes(&gone("b"), 12);
+    assert_eq!(s.poll(&mut link, 12), None);
+    s.layout(at(1));
+    let m = mark(&s.flush(&mut link, 13)).expect("a document numbered");
+    for name in ["a", "b"] {
+        link.bytes(&gone(name), 14);
+        assert_eq!(s.poll(&mut link, 14), None, "{name}'s second ENOENT");
+    }
+    link.bytes(&marked(&m), 15);
+    assert_eq!(s.poll(&mut link, 15), None, "the mark's answer");
+    link.bytes(&gone("a"), 16);
+    assert_eq!(
+        s.poll(&mut link, 16),
+        Some(SessionMessage::Relayout { lost: true }),
+        "an ENOENT after the mark's answer"
+    );
+}
+
+// A mark whose answer never comes (the host that would have sent it went
+// away) holds for 3 s from its flush; an ENOENT after that is a loss again.
+#[test]
+fn a_lost_mark_times_out() {
+    let (mut s, mut link) = native();
+    s.layout([want("a", 0, 0)]);
+    s.flush(&mut link, 10);
+    link.bytes(&gone("a"), 11);
+    assert_eq!(
+        s.poll(&mut link, 11),
+        Some(SessionMessage::Relayout { lost: true })
+    );
+    s.layout([want("a", 0, 0)]);
+    assert!(
+        mark(&s.flush(&mut link, 20)).is_some(),
+        "a's document numbered"
+    );
+    link.bytes(&gone("a"), 3019);
+    assert_eq!(s.poll(&mut link, 3019), None, "an ENOENT inside the mark");
+    link.bytes(&gone("a"), 3020);
+    assert_eq!(
+        s.poll(&mut link, 3020),
+        Some(SessionMessage::Relayout { lost: true }),
+        "an ENOENT past the mark"
     );
 }
 
