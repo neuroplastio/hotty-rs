@@ -7,8 +7,9 @@
 //!
 //! - **Input.** [`Session::poll`] reads what the link was handed and returns
 //!   [`SessionMessage`]s: ready (the mode is known), an event, an error (a
-//!   command refused), an ack (the ok of a numbered command), relayout,
-//!   pong, and input that is not hotty's, as it was.
+//!   command refused), an ack (the ok of a numbered command), relayout
+//!   (saying when the host lost documents, so that the program sends their
+//!   resources again), pong, and input that is not hotty's, as it was.
 //! - **Frames.** With each frame, the program says which surfaces it wants
 //!   where ([`Session::layout`]); [`Session::flush`] returns the commands
 //!   that changed, for the adapter to write with that frame, in the same
@@ -180,7 +181,17 @@ pub enum SessionMessage {
     Ack(Reply),
     /// Lay the surfaces out again: the screen was erased or scrolled under
     /// them, or a document went missing.
-    Relayout,
+    Relayout {
+        /// The host lost a document, which the next layout sends again, and
+        /// it may have lost the resources ([`res`](crate::res)) the document
+        /// refers to as well, since a full reset ends the session that
+        /// stored them (SPEC §2, §7.1). Send them again before the layout,
+        /// so that they reach the host ahead of the document; sending one
+        /// again replaces it. One loss is reported once, however many
+        /// documents it took: an `ENOENT` for a placement sent before the
+        /// report is taken as the same loss's, and gives a plain relayout.
+        lost: bool,
+    },
     /// A ping's answer: the terminal took what was written before it,
     /// `took` milliseconds after.
     Pong {
@@ -241,6 +252,11 @@ pub struct Session {
     keep: HashMap<String, bool>,
     seen: HashMap<String, u64>,
     refused: BTreeSet<String>,
+    // The losses reported (Relayout's `lost`), and what it was when each
+    // surface was last placed: an ENOENT for a placement sent before the
+    // last report is that loss's.
+    lost: u64,
+    placed_in: HashMap<String, u64>,
     layouts: u64,
     learned: usize,
     closed: bool,
@@ -341,8 +357,9 @@ impl Session {
         }
         loop {
             if let Some(m) = self.messages.pop_front() {
-                if m == SessionMessage::Relayout {
-                    if !self.relayout_due {
+                if let SessionMessage::Relayout { lost } = m {
+                    // A loss is reported, however late: it was counted.
+                    if !self.relayout_due && !lost {
                         continue;
                     }
                     self.relayout_due = false;
@@ -390,7 +407,8 @@ impl Session {
             caps: self.caps.clone(),
         });
         self.relayout_due = true;
-        self.messages.push_back(SessionMessage::Relayout);
+        self.messages
+            .push_back(SessionMessage::Relayout { lost: false });
     }
 
     fn forget(&mut self, s: &str) {
@@ -420,18 +438,25 @@ impl Session {
             self.forget(&s);
             self.refused.insert(s);
             self.relayout_due = true;
-            self.messages.push_back(SessionMessage::Relayout);
+            self.messages
+                .push_back(SessionMessage::Relayout { lost: false });
             return;
         }
         if r.re == "place" && code == code::ENOENT && self.refused.remove(&s) {
             return;
         }
         if r.re == "place" && code == code::ENOENT && self.has_doc.contains(&s) {
-            // The host lost the document (a reset, the alternate screen):
-            // send both again with the next layout.
+            // The host lost the document (a reset, the alternate screen, a
+            // host restarting behind a relay): send both again with the next
+            // layout, and have the program send its resources again, unless
+            // the placement went before the last loss was reported.
+            let lost = self.placed_in.get(&s).copied().unwrap_or(0) == self.lost;
+            if lost {
+                self.lost += 1;
+            }
             self.forget(&s);
             self.relayout_due = true;
-            self.messages.push_back(SessionMessage::Relayout);
+            self.messages.push_back(SessionMessage::Relayout { lost });
             return;
         }
         self.messages.push_back(SessionMessage::Error(r));
@@ -513,6 +538,7 @@ impl Session {
                 self.counts.places += 1;
                 self.placed.insert(w.name.clone(), p);
                 self.flags.insert(w.name.clone(), p.flags);
+                self.placed_in.insert(w.name.clone(), self.lost);
             }
         }
         let names: Vec<String> = self.has_doc.iter().cloned().collect();
@@ -585,6 +611,7 @@ impl Session {
         self.scroll.remove(name);
         self.keep.remove(name);
         self.seen.remove(name);
+        self.placed_in.remove(name);
     }
 
     /// Whether the host has a surface's document, on screen or hidden, so
@@ -646,7 +673,8 @@ impl Session {
     /// after erase in display (2 or 3), scroll up or down, insert or delete
     /// lines, a new scrolling region, reverse index, leaving the alternate
     /// screen, or a full reset. A full reset deletes every surface, so after
-    /// one the next layout sends the documents again. The surfaces count as
+    /// one the next layout sends the documents again, and the relayout says
+    /// the host lost them (`lost`), resources and all. The surfaces count as
     /// placed nowhere from that point in the stream, so a layout that
     /// follows places them again.
     pub fn watch(&mut self, output: &[u8]) {
@@ -675,10 +703,27 @@ impl Session {
         }
         if reset {
             // A full reset deletes every surface (SPEC §5.4), hidden ones
-            // too: the next layout sends their documents again.
+            // too: the next layout sends their documents again. It ends the
+            // session that stored the resources as well (SPEC §2), so after
+            // documents it is a loss, reported with nothing placed too, in
+            // place of a plain relayout still queued. Before any it says
+            // nothing, or a program that writes one with each frame would
+            // lay out for ever.
+            let had = !self.has_doc.is_empty();
             self.has_doc.clear();
             self.flags.clear();
             self.refused.clear();
+            if had {
+                self.placed.clear();
+                self.lost += 1;
+                self.counts.relayouts += 1;
+                self.relayout_due = true;
+                self.messages
+                    .retain(|m| *m != SessionMessage::Relayout { lost: false });
+                self.messages
+                    .push_back(SessionMessage::Relayout { lost: true });
+                return;
+            }
         }
         if self.placed.is_empty() {
             return;
@@ -687,7 +732,8 @@ impl Session {
         self.counts.relayouts += 1;
         if !self.relayout_due {
             self.relayout_due = true;
-            self.messages.push_back(SessionMessage::Relayout);
+            self.messages
+                .push_back(SessionMessage::Relayout { lost: false });
         }
     }
 

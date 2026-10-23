@@ -92,7 +92,7 @@ fn main() -> std::io::Result<()> {
 | `Input(ev)` | crossterm's event, as crossterm would read it: keys, the mouse, pastes, focus, resizes. Hand it to the handler the program has |
 | `Ready(mode)` | the session knows the terminal: `Mode::Native` (a host) or `Mode::Text`. Draw |
 | `Hotty(ev)` | something the user did in a surface: `click`, `submit`, `change`, `input`, … with its target and detail |
-| `Relayout` | the screen was erased or scrolled under the surfaces: draw, which places them again |
+| `Relayout { lost }` | the screen was erased or scrolled under the surfaces, or the host lost a document: draw, which places them again. With `lost`, the host may have lost the resources (`hotty::res`) its documents refer to as well: `session.send` them again before drawing, so that they reach it ahead of the documents |
 | `Error(reply)`, `Ack(reply)` | a command the host refused, or the ok of one the program numbered |
 | `Pong(took)` | the answer to `session.ping()`: how long the terminal took to take a frame |
 

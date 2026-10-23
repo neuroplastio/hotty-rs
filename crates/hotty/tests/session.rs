@@ -130,7 +130,11 @@ fn an_erase_asks_for_a_relayout_and_places_again() {
     s.watch(b"\x1b[H\x1b[2");
     assert_eq!(s.poll(&mut link, 11), None);
     s.watch(b"J");
-    assert_eq!(s.poll(&mut link, 12), Some(SessionMessage::Relayout));
+    // The host keeps its documents through an erase: nothing was lost.
+    assert_eq!(
+        s.poll(&mut link, 12),
+        Some(SessionMessage::Relayout { lost: false })
+    );
     s.layout([want("a", 0, 0)]);
     assert_eq!(actions(&s.flush(&mut link, 13)), ["place a"]);
     assert_eq!(s.counts().relayouts, 1);
@@ -153,9 +157,41 @@ fn a_full_reset_sends_the_documents_again() {
     s.layout([want("a", 0, 0)]);
     s.flush(&mut link, 10);
     s.watch(b"\x1bc");
-    assert_eq!(s.poll(&mut link, 11), Some(SessionMessage::Relayout));
+    assert_eq!(
+        s.poll(&mut link, 11),
+        Some(SessionMessage::Relayout { lost: true })
+    );
     s.layout([want("a", 0, 0)]);
     assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
+}
+
+// A full reset ends the session that stored the resources (SPEC §2), so
+// after documents it is a loss, and takes the place of a plain relayout
+// still waiting. Before any, it says nothing.
+#[test]
+fn a_full_reset_is_a_loss() {
+    let (mut s, mut link) = native();
+    s.layout([want("a", 0, 0)]);
+    s.flush(&mut link, 10);
+    s.watch(b"\x1b[2J");
+    s.watch(b"\x1bc");
+    assert_eq!(
+        s.poll(&mut link, 11),
+        Some(SessionMessage::Relayout { lost: true })
+    );
+    assert_eq!(s.poll(&mut link, 11), None);
+    s.watch(b"\x1bc");
+    assert_eq!(s.poll(&mut link, 12), None);
+}
+
+// The host's ENOENT for a placement of a surface it does not have.
+fn gone(name: &str) -> Vec<u8> {
+    reply(
+        &[("a", "err"), ("re", "place"), ("s", name)],
+        &[
+            0x81, 0xa4, b'c', b'o', b'd', b'e', 0xa6, b'E', b'N', b'O', b'E', b'N', b'T',
+        ],
+    )
 }
 
 #[test]
@@ -163,18 +199,70 @@ fn a_lost_document_is_sent_again() {
     let (mut s, mut link) = native();
     s.layout([want("a", 0, 0)]);
     s.flush(&mut link, 10);
-    link.bytes(
-        &reply(
-            &[("a", "err"), ("re", "place"), ("s", "a")],
-            &[
-                0x81, 0xa4, b'c', b'o', b'd', b'e', 0xa6, b'E', b'N', b'O', b'E', b'N', b'T',
-            ],
-        ),
-        11,
+    link.bytes(&gone("a"), 11);
+    assert_eq!(
+        s.poll(&mut link, 11),
+        Some(SessionMessage::Relayout { lost: true })
     );
-    assert_eq!(s.poll(&mut link, 11), Some(SessionMessage::Relayout));
     s.layout([want("a", 0, 0)]);
     assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
+}
+
+// A host that loses its documents loses them all at once, and the program
+// sends its resources again once: the first ENOENT reports the loss, and
+// one for a placement sent before the report is the same loss's. A
+// placement sent after the report that finds its document gone is a loss
+// of its own.
+#[test]
+fn a_loss_is_reported_once() {
+    let (mut s, mut link) = native();
+    let all = || [want("a", 0, 0), want("b", 0, 3), want("c", 0, 6)];
+    s.layout(all());
+    s.flush(&mut link, 10);
+    link.bytes(&gone("a"), 11);
+    assert_eq!(
+        s.poll(&mut link, 11),
+        Some(SessionMessage::Relayout { lost: true })
+    );
+    s.layout(all());
+    assert_eq!(actions(&s.flush(&mut link, 12)), ["doc a", "place a"]);
+    for name in ["b", "c"] {
+        link.bytes(&gone(name), 13);
+        assert_eq!(
+            s.poll(&mut link, 13),
+            Some(SessionMessage::Relayout { lost: false }),
+            "{name}'s ENOENT"
+        );
+    }
+    s.layout(all());
+    assert_eq!(
+        actions(&s.flush(&mut link, 14)),
+        ["doc b", "place b", "doc c", "place c"]
+    );
+    // They are lost again: the placements after the erase went after the
+    // report.
+    s.watch(b"\x1b[2J");
+    assert_eq!(
+        s.poll(&mut link, 15),
+        Some(SessionMessage::Relayout { lost: false })
+    );
+    s.layout(all());
+    assert_eq!(
+        actions(&s.flush(&mut link, 16)),
+        ["place a", "place b", "place c"]
+    );
+    link.bytes(&gone("b"), 17);
+    assert_eq!(
+        s.poll(&mut link, 17),
+        Some(SessionMessage::Relayout { lost: true }),
+        "a second loss"
+    );
+    link.bytes(&gone("a"), 18);
+    assert_eq!(
+        s.poll(&mut link, 18),
+        Some(SessionMessage::Relayout { lost: false }),
+        "a's ENOENT in the second loss"
+    );
 }
 
 #[test]

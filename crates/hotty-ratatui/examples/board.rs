@@ -136,7 +136,7 @@ fn run(terminal: &mut hotty_ratatui::DefaultTerminal, session: &Session) -> std:
                 app.note(format!("{} {}", e.kind, e.target));
             }
             Event::Error(r) => app.note(format!("error: {:?}", r.err())),
-            Event::Relayout | Event::Ack(_) | Event::Pong(_) => {}
+            Event::Relayout { .. } | Event::Ack(_) | Event::Pong(_) => {}
         }
         // The count changes in place: one delta, with the next frame.
         session.send(hotty::set_text(&card, "count", app.count));

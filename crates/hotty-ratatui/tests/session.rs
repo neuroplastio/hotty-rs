@@ -217,7 +217,7 @@ fn an_erase_asks_for_a_relayout() {
     let card = session.surface("card");
     draw(&session, &mut terminal, &card);
     terminal.clear().unwrap();
-    assert_eq!(session.read().unwrap(), Event::Relayout);
+    assert_eq!(session.read().unwrap(), Event::Relayout { lost: false });
     draw(&session, &mut terminal, &card);
     host.wait_for(3);
     assert_eq!(host.actions()[2], format!("place {card}"));

@@ -37,7 +37,14 @@ pub enum Event {
     Ack(Reply),
     /// The screen was erased or scrolled under the surfaces, or a document
     /// went missing: draw a frame, which places them again.
-    Relayout,
+    Relayout {
+        /// The host lost a document, and may have lost the resources
+        /// ([`hotty::res`]) it refers to as well (SPEC §2, §7.1): send them
+        /// again ([`Session::send`]) before drawing, so that they reach the
+        /// host ahead of the document; sending one again replaces it. One
+        /// loss is reported once, however many documents it took.
+        lost: bool,
+    },
     /// A ping's answer ([`Session::ping`]): the terminal took the frame
     /// written before it, this long after.
     Pong(Duration),
@@ -269,7 +276,9 @@ impl Session {
                     SessionMessage::Event(e) => events.push_back(Event::Hotty(e)),
                     SessionMessage::Error(r) => events.push_back(Event::Error(r)),
                     SessionMessage::Ack(r) => events.push_back(Event::Ack(r)),
-                    SessionMessage::Relayout => events.push_back(Event::Relayout),
+                    SessionMessage::Relayout { lost } => {
+                        events.push_back(Event::Relayout { lost });
+                    }
                     SessionMessage::Pong { took } => {
                         events.push_back(Event::Pong(Duration::from_millis(took)));
                     }
