@@ -103,6 +103,9 @@ type Source = Box<dyn FnMut(&mut [u8]) -> io::Result<usize> + Send>;
 struct State {
     link: Link,
     seen: u64,
+    /// `seen` when the adapter last looked, through [`Terminal::with_link`]
+    /// or [`Terminal::wait`].
+    looked: u64,
     source: Option<Source>,
 }
 
@@ -300,6 +303,7 @@ impl Terminal {
                 state: Mutex::new(State {
                     link,
                     seen: 0,
+                    looked: 0,
                     source: Some(source),
                 }),
                 cond: Condvar::new(),
@@ -643,6 +647,7 @@ impl Terminal {
     pub fn with_link<R>(&self, f: impl FnOnce(&mut Link, u64) -> R) -> io::Result<R> {
         self.read();
         let mut st = self.shared.lock();
+        st.looked = st.seen;
         let r = f(&mut st.link, self.shared.now());
         let waiting = st.link.waiting();
         self.shared.flush(st, b"")?;
@@ -652,19 +657,22 @@ impl Terminal {
 
     /// Waits until the terminal reads something, or the time is up, and
     /// lets the time pass: for an adapter that polls the [`Link`] itself.
-    /// Returns whether something arrived.
+    /// Returns whether something arrived since the adapter last looked,
+    /// through [`Terminal::with_link`] or here: what the terminal read
+    /// between the two calls returns at once, and is not lost.
     pub fn wait(&self, timeout: Duration) -> bool {
         self.read();
         let until = self.shared.now() + timeout.as_millis() as u64;
         let mut st = self.shared.lock();
-        let seen = st.seen;
-        while st.seen == seen && !st.link.has_input() && self.shared.now() < until {
+        while st.seen == st.looked && !st.link.has_input() && self.shared.now() < until {
             if st.link.ended() || st.link.closed() {
                 return false;
             }
             st = self.sleep(st, Some(until));
         }
-        st.seen != seen || st.link.has_input()
+        let arrived = st.seen != st.looked || st.link.has_input();
+        st.looked = st.seen;
+        arrived
     }
 
     /// The time the terminal's [`Link`] is handed, in milliseconds.

@@ -186,3 +186,16 @@ fn closing_ends_the_input_stream() {
     t.close();
     assert_eq!(t.next_input(Some(Duration::from_millis(20))), None);
 }
+
+#[test]
+fn what_arrives_between_a_look_and_a_wait_is_not_lost() {
+    let (_host, t) = FakeHost::start(true);
+    assert!(t.detect());
+    t.with_link(|_, _| ()).unwrap();
+    // As the reader would, between the adapter's look and its wait.
+    t.wake();
+    let start = std::time::Instant::now();
+    assert!(t.wait(Duration::from_secs(5)));
+    assert!(start.elapsed() < Duration::from_secs(1), "it waited");
+    assert!(!t.wait(Duration::from_millis(30)), "it was seen once");
+}
