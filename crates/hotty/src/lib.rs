@@ -191,8 +191,8 @@ pub mod code {
     pub const EQUOTA: &str = "EQUOTA";
     /// The host gave up on work over its time budget.
     pub const EBUDGET: &str = "EBUDGET";
-    /// Nothing can lay the document out yet: a multiplexer with no terminal
-    /// attached; the rows come as `fit` (SPEC §5.2).
+    /// No terminal attached to check the command or lay its document out:
+    /// a multiplexer kept it unchecked (SPEC §3.6, §5.2).
     pub const ENOTERM: &str = "ENOTERM";
     /// An `a=field` made against a revision the control has passed, or
     /// while an input method composes in it; the detail is the control's
