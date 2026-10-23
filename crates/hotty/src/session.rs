@@ -434,15 +434,18 @@ impl Session {
     }
 
     fn reply(&mut self, r: Reply, now: u64) {
-        if self.marking
-            && self.mark_n != 0
-            && r.n == Some(self.mark_n)
+        if let Some(n) = r.n
+            && n >= MARK_BASE
             && r.re == "doc"
-            && r.surface.as_deref() == Some(self.mark_doc.as_str())
         {
-            self.marking = false; // the loss's late answers have all come
+            if self.marking
+                && n == self.mark_n
+                && r.surface.as_deref() == Some(self.mark_doc.as_str())
+            {
+                self.marking = false; // the loss's late answers have all come
+            }
             if r.ok {
-                return;
+                return; // a mark is the Session's, even one answered late
             }
         }
         if r.ok {

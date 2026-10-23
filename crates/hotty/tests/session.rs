@@ -367,10 +367,7 @@ fn a_lost_mark_times_out() {
         Some(SessionMessage::Relayout { lost: true })
     );
     s.layout([want("a", 0, 0)]);
-    assert!(
-        mark(&s.flush(&mut link, 20)).is_some(),
-        "a's document numbered"
-    );
+    let late = mark(&s.flush(&mut link, 20)).expect("a's document numbered");
     link.bytes(&gone("a"), 3019);
     assert_eq!(s.poll(&mut link, 3019), None, "an ENOENT inside the mark");
     link.bytes(&gone("a"), 3020);
@@ -378,6 +375,27 @@ fn a_lost_mark_times_out() {
         s.poll(&mut link, 3020),
         Some(SessionMessage::Relayout { lost: true }),
         "an ENOENT past the mark"
+    );
+    s.layout([want("a", 0, 0)]);
+    let second = mark(&s.flush(&mut link, 3030)).expect("a's document numbered again");
+    assert_ne!(late, second);
+    // The first mark's answer, come at last, is the Session's too, and the
+    // second loss still holds.
+    link.bytes(&marked(&late), 3031);
+    assert_eq!(s.poll(&mut link, 3031), None, "the late mark");
+    link.bytes(&gone("a"), 3032);
+    assert_eq!(
+        s.poll(&mut link, 3032),
+        None,
+        "an ENOENT inside the second mark"
+    );
+    link.bytes(&marked(&second), 3033);
+    assert_eq!(s.poll(&mut link, 3033), None, "the second mark");
+    link.bytes(&gone("a"), 3034);
+    assert_eq!(
+        s.poll(&mut link, 3034),
+        Some(SessionMessage::Relayout { lost: true }),
+        "an ENOENT after the second mark's answer"
     );
 }
 
