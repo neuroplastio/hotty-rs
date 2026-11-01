@@ -24,7 +24,7 @@ commit for builds you can reproduce:
 hotty = { git = "https://github.com/neuroplastio/hotty-rs" }
 ```
 
-It speaks hotty 0.5. Its `Terminal` is Unix's: it opens `/dev/tty`. It
+It speaks hotty 0.6. Its `Terminal` is Unix's: it opens `/dev/tty`. It
 needs Rust 1.88 or later.
 
 ## Hello
@@ -60,7 +60,7 @@ What each step does:
 - **`Terminal::open`** opens the process's terminal, whatever its standard
   streams are, so `x=$(hello)` still draws on the screen. It fails when
   there is no terminal; then the program writes plain data.
-- **`detect`** asks the terminal whether it is a host of hotty 0.5, and
+- **`detect`** asks the terminal whether it is a host of hotty 0.6, and
   waits until the answer is in: at once on a host, 150 ms on a terminal
   that answers only its device attributes, 1.5 s at most.
 - **`print`** sends the document and places it at the cursor, in one

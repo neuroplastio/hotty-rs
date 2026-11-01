@@ -56,7 +56,10 @@ split.feed(&program_output, &mut |o| match o {
   select's option, `rev` (`ESTALE`) and then the positions are the
   host's: a stale command is `ESTALE` whatever its positions, and one
   that is not is `EINVAL` when a position is negative, past the end, or
-  inside a code point.
+  inside a code point. `placement_of` reads `b=1`, and only `1`, as a
+  backdrop (SPEC §5.2): a host without the feature `backdrop` ignores it,
+  and a relay that places the surface again with `place` passes it on, as
+  it does `z`.
 - **`quiet_of`** says how much of a reply a command asks for, and
   **`speaks`** whether a query lists the version this SDK speaks.
 

@@ -7,8 +7,8 @@ them. It follows the hotty repository's SDK.md: the same two layers, names
 and defaults as the other SDKs, and every SDK section of the conformance
 vectors.
 
-It speaks hotty 0.5: a host's replies and events carry msgpack bodies (SPEC
-§3.3), its query lists the version it speaks (`a=q:n=1:v=0.5`, SPEC §4), and
+It speaks hotty 0.6: a host's replies and events carry msgpack bodies (SPEC
+§3.3), its query lists the version it speaks (`a=q:n=1:v=0.6`, SPEC §4), and
 keys are named as myelin key names 0.1 names them (SPEC §10.4). A terminal of
 another hotty version is no host to it, and the program draws in cells.
 
@@ -17,7 +17,7 @@ another hotty version is no host to it, and the program draws in cells.
 | `hotty` | the wire layer: builders, `encode`, `Decoder`, `Scanner`, `Detector`, replies, events and capabilities, keys and keymaps; a `Field` edited as a host edits one; `Link`, `Session` and `Terminal`; and `host`, what a host or a relay reads and writes | §3, §4.1, §4.3, §4.6 |
 | `hotty-ratatui` | hotty for a [ratatui](https://ratatui.rs) program: a `Surface` widget, a session that reads the terminal and hands back crossterm's events, a backend | §4.3 |
 
-0.5.x speaks hotty 0.5; the patch number is this repository's own.
+0.6.x speaks hotty 0.6; the patch number is this repository's own.
 
 ## Install
 
@@ -172,6 +172,8 @@ split.feed(&program_output, &mut |o| match o {
   `placement_of` read a command as SPEC has a host read it, and refuse one
   with the `EINVAL` to answer; `control_kind` and `field_fits` say whether
   an `a=field` fits its target; `quiet_of` and `speaks` say what to answer.
+  A placement with `b=1` is a backdrop (SPEC §5.2): a host without the
+  feature `backdrop` ignores it, and a relay passes it on, as it does `z`.
 - `reply_ok`, `reply_err`, `reply_query` and `encode_event` write what a
   host sends, each body typed as SPEC §3.3 types it. A relay that re-names
   an event's surface passes its detail on as it came.
