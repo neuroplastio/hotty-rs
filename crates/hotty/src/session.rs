@@ -585,6 +585,7 @@ impl Session {
                     fit: changed(have.fit, p.flags.fit),
                     hover: changed(have.hover, p.flags.hover),
                     keep_cursor: true,
+                    backdrop: false,
                 };
                 self.queue(place_at(&w.name, at.x as u32, at.y as u32, &placement));
                 self.counts.places += 1;

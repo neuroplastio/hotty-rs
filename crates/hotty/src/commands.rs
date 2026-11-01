@@ -276,7 +276,8 @@ pub struct Window {
 /// Where and how a surface is shown (SPEC §5.2).
 ///
 /// `press`, `fit` and `hover` belong to the surface: `Some(true)` turns
-/// one on, `Some(false)` off, and `None` leaves it as it was.
+/// one on, `Some(false)` off, and `None` leaves it as it was. `z` and
+/// `backdrop` belong to the placement: each placement says them again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Placement {
     /// The surface's width in cells, 1 to 1000.
@@ -303,6 +304,13 @@ pub struct Placement {
     /// Leaves the cursor where it was (`C=1`); otherwise it goes to the
     /// start of the line below the placement.
     pub keep_cursor: bool,
+    /// A backdrop (`b=1`): drawn under the cells, below every placement
+    /// that is not one, taking no pointer and never the keyboard. A host
+    /// without the feature [`BACKDROP`](crate::feature::BACKDROP) ignores
+    /// it and draws the surface over the text, so a program sets it only
+    /// where [`Caps::has`](crate::Caps::has) says the host has it. The
+    /// last field, though `b` goes out after `z` (SDK.md §3.4.1).
+    pub backdrop: bool,
 }
 
 impl Placement {
@@ -344,6 +352,9 @@ impl Placement {
         }
         if self.z != 0 {
             c.push("z", self.z.to_string());
+        }
+        if self.backdrop {
+            c.push("b", "1");
         }
         for (k, flag) in [("p", self.press), ("f", self.fit), ("v", self.hover)] {
             if let Some(on) = flag {
@@ -948,6 +959,24 @@ mod tests {
         assert_eq!(
             place_at("c", 4, 2, &Placement::new(40, 0)).n(3).to_string(),
             "\x1b7\x1b[3;5H\x1b]7279;a=place:s=c:c=40:r=auto:C=1:n=3\x1b\\\x1b8"
+        );
+    }
+
+    #[test]
+    fn a_backdrop_is_b_1_after_z_and_nothing_otherwise() {
+        let p = Placement {
+            z: -3,
+            press: Some(true),
+            backdrop: true,
+            ..Placement::new(40, 10)
+        };
+        assert_eq!(
+            place("card", &p).to_string(),
+            "\x1b]7279;a=place:s=card:c=40:r=10:z=-3:b=1:p=1\x1b\\"
+        );
+        assert_eq!(
+            place("card", &Placement::new(40, 2)).to_string(),
+            "\x1b]7279;a=place:s=card:c=40:r=2\x1b\\"
         );
     }
 }

@@ -34,6 +34,7 @@ fn placement(p: &Value) -> Placement {
         fit: flag(&p["fit"]),
         hover: flag(&p["hover"]),
         keep_cursor: p["keep_cursor"].as_bool().unwrap_or(false),
+        backdrop: p["backdrop"].as_bool().unwrap_or(false),
     }
 }
 

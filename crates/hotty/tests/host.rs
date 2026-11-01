@@ -367,9 +367,26 @@ fn a_placement_reads_back() {
             fit: Some(false),
             hover: None,
             keep_cursor: true,
+            backdrop: true,
         },
     ] {
+        // So a relay that places it again passes it on as it came.
         assert_eq!(placement_of(&command(place("s", &p))).unwrap(), p);
+    }
+    // Only b=1 makes a backdrop.
+    for (b, backdrop) in [
+        (None, false),
+        (Some("1"), true),
+        (Some("0"), false),
+        (Some("2"), false),
+    ] {
+        let mut pairs = vec![("a", "place"), ("s", "s"), ("c", "40")];
+        pairs.extend(b.map(|b| ("b", b)));
+        assert_eq!(
+            placement_of(&msg(&pairs, b"")).unwrap().backdrop,
+            backdrop,
+            "{b:?}"
+        );
     }
     // Defaults fill the window in; with auto rows, h is the host's to find.
     let m = msg(

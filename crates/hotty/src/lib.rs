@@ -173,8 +173,10 @@ pub mod feature {
     pub const COUNT: &str = "count";
     /// It keeps a program's menu, shows its levels and lets the user pick from it (SPEC §10.7).
     pub const MENU: &str = "menu";
+    /// It draws a placement with `b=1` under the cells, a backdrop (SPEC §5.2).
+    pub const BACKDROP: &str = "backdrop";
     /// Every feature this SDK knows.
-    pub const ALL: [&str; 4] = [PASSTHROUGH, HOVER, COUNT, MENU];
+    pub const ALL: [&str; 5] = [PASSTHROUGH, HOVER, COUNT, MENU, BACKDROP];
 }
 
 /// The error codes a host replies (SPEC §3.6).

@@ -471,7 +471,8 @@ pub struct Caps {
 
 impl Caps {
     /// Whether the host has an optional feature (SPEC §4): `passthrough`,
-    /// `hover`, `count` or `menu`. Everything else a 0.5 host does.
+    /// `hover`, `count`, `menu` or `backdrop`. Everything else a 0.5 host
+    /// does.
     pub fn has(&self, feature: &str) -> bool {
         self.features
             .as_deref()

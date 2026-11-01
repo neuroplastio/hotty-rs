@@ -256,9 +256,12 @@ pub fn touch_of(m: &Message) -> Result<Vec<TouchArea>, Error> {
 /// window as the command gives it, its defaults filled in: `w` reaches the
 /// surface's right edge, and `h` its bottom, which with `rows` 0 is the
 /// host's to find (`h` 0). A placement that leaves `press`, `fit` or `hover`
-/// out, or gives one a value other than `0` or `1`, has it `None`. A command
-/// without `c`, or with a size, a window or a `z` out of range, is
-/// `EINVAL`.
+/// out, or gives one a value other than `0` or `1`, has it `None`. It is a
+/// `backdrop` with `b=1` only: without `b`, or with any other value, it is
+/// above the cells. A host without the feature `backdrop` ignores it, and a
+/// relay that places the surface again with [`place`](crate::place) passes
+/// it on. A command without `c`, or with a size, a window or a `z` out of
+/// range, is `EINVAL`.
 pub fn placement_of(m: &Message) -> Result<Placement, Error> {
     let num = |k: &str, default: i64, lo: i64, hi: i64| -> Option<i64> {
         match m.get(k) {
@@ -314,6 +317,7 @@ pub fn placement_of(m: &Message) -> Result<Placement, Error> {
         fit: flag("f"),
         hover: flag("v"),
         keep_cursor: m.get("C") == Some("1"),
+        backdrop: m.get("b") == Some("1"),
     })
 }
 
