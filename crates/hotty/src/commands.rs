@@ -232,7 +232,7 @@ impl From<Query> for String {
 
 /// Asks whether the terminal is a hotty host that speaks
 /// [`VERSION`](crate::VERSION), fenced by Primary Device Attributes (SPEC §4):
-/// `a=q:n=<n>:v=0.5`, then `ESC [ c`. A host replies to the query, numbered
+/// `a=q:n=<n>:v=0.6`, then `ESC [ c`. A host replies to the query, numbered
 /// `n`, before the DA1 answer every terminal sends: its capabilities, or
 /// `EVERSION` when it speaks no version the query lists. A
 /// [`Detector`](crate::Detector) sends it and reads the answers.

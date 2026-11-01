@@ -1,10 +1,20 @@
-//! The vectors are the spec's, and of this SDK's version (SDK.md §5.2).
+//! The vectors are the spec's, and of this SDK's version (SDK.md §5.2), and
+//! so are the crates.
 
 mod common;
 
 #[test]
 fn the_vectors_are_this_sdks_version() {
     assert_eq!(common::vectors()["version"].as_str(), Some(hotty::VERSION));
+}
+
+/// The crates' MAJOR.MINOR is the spec version this SDK speaks, and PATCH
+/// their own (gov P-5 rule 6): 0.6.x speaks hotty 0.6.
+#[test]
+fn the_crates_are_this_sdks_version() {
+    let v = env!("CARGO_PKG_VERSION");
+    let major_minor: Vec<&str> = v.split('.').take(2).collect();
+    assert_eq!(major_minor.join("."), hotty::VERSION, "the crates are {v}");
 }
 
 /// The copy in testdata is the spec's, when a checkout of the hotty
