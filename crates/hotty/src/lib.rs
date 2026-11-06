@@ -132,7 +132,10 @@ pub mod kind {
     pub const CARET: &str = "caret";
     /// A form was submitted; the detail is its fields.
     pub const SUBMIT: &str = "submit";
-    /// A press anywhere in a placement made with `press`.
+    /// A press anywhere in a placement made with `press`, or a secondary
+    /// press on an element with `secondary` in its `data-on` (SPEC §9). A
+    /// handler that means the primary button checks [`Event::button`](crate::Event::button):
+    /// a secondary press has 2, with the pointer's cell in `c` and `r`.
     pub const PRESS: &str = "press";
     /// The user focused an element; the target names it (SPEC §10.1).
     pub const FOCUS: &str = "focus";

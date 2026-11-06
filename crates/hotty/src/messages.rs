@@ -115,6 +115,13 @@ impl Message {
                 .and_then(|m| u32::try_from(m).ok())
                 .unwrap_or(0);
         }
+        if k == "press" {
+            e.button = int_of("button")
+                .and_then(|b| u32::try_from(b).ok())
+                .unwrap_or(0);
+            e.c = int_of("c");
+            e.r = int_of("r");
+        }
         if matches!(k, "click" | "press") {
             e.area = d.and_then(|d| body::area(d.get("area")?));
         }
@@ -321,6 +328,16 @@ pub struct Event {
     pub hover: Option<Hover>,
     /// `area`: the cells of the element a `click` or `press` reported.
     pub area: Option<Area>,
+    /// `button`: the DOM's number for a `press`'s button (SPEC §9), 2 for a
+    /// secondary press; 0 when absent, the primary button's. A handler of
+    /// `press` that means the primary button checks it.
+    pub button: u32,
+    /// `c`: the pointer's column on a secondary press (SPEC §9), from 0 at
+    /// the surface's left; `None` when the detail has none. May be negative.
+    pub c: Option<i64>,
+    /// `r`: the pointer's row on a secondary press (SPEC §9); `None` when
+    /// the detail has none. May be negative.
+    pub r: Option<i64>,
     /// `count`: a `click`'s place in its run of clicks (SPEC §9), 2 for the
     /// second click of a double click; 1 for a click whose detail has none;
     /// `None` for any other kind.
@@ -610,7 +627,13 @@ mod body {
                 ("mods", Int),
                 ("count", Int),
             ]),
-            "press" => &Map(&[("area", AREA), ("mods", Int)]),
+            "press" => &Map(&[
+                ("area", AREA),
+                ("mods", Int),
+                ("button", Int),
+                ("c", Int),
+                ("r", Int),
+            ]),
             "change" => &Map(&[("checked", Bool), ("value", Str), ("rev", Int)]),
             "input" => &Map(&[("value", Str), ("rev", Int), ("sel", Array(&Int))]),
             "caret" => &Map(&[("sel", Array(&Int)), ("rev", Int)]),

@@ -83,6 +83,9 @@ fn event_json(e: &Event) -> Value {
         "hover": opt(e.hover.map(|h| json!({ "c": opt(h.c), "r": opt(h.r), "out": h.out }))),
         "area": opt(e.area.as_ref().map(area_json)),
         "count": opt(e.count),
+        "button": e.button,
+        "c": opt(e.c),
+        "r": opt(e.r),
         "view": opt(e.view.as_ref().map(|v| json!({
             "areas": v.areas.iter().map(|(k, a)| (k.clone(), area_json(a))).collect::<Map<_, _>>(),
             "at_end": v.at_end,

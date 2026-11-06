@@ -580,6 +580,14 @@ fn events_read_back() {
             ..ev("press", Some("s"), "")
         },
         Event {
+            area,
+            button: 2,
+            c: Some(5),
+            r: Some(-1),
+            mods: MOD_SHIFT,
+            ..ev("press", Some("s"), "row")
+        },
+        Event {
             checked: Some(true),
             value: Some("on".into()),
             ..ev("change", Some("s"), "box")
@@ -668,6 +676,24 @@ fn events_read_back() {
         got.message = Message::default();
         assert_eq!(got, want, "{s:?}");
     }
+}
+
+#[test]
+fn a_primary_press_is_written_with_no_button_c_or_r() {
+    let s = encode_event(&Event {
+        area: Some(Area {
+            c: 1,
+            r: 2,
+            w: 3,
+            h: 4,
+        }),
+        ..ev("press", Some("s"), "row")
+    });
+    let e = event_of(s);
+    assert_eq!((e.button, e.c, e.r), (0, None, None));
+    // A map of the area alone: one entry, and no key `button`.
+    assert_eq!(e.message.payload[0], 0x81);
+    assert!(!e.message.payload.windows(6).any(|w| w == b"button"));
 }
 
 #[test]

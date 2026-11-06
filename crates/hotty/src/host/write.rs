@@ -239,7 +239,13 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
             fields(&mut w, f);
         }
         kind::PRESS => {
-            if e.area.is_none() && mods.is_none() {
+            let button = (e.button != 0).then_some(i64::from(e.button));
+            if e.area.is_none()
+                && mods.is_none()
+                && button.is_none()
+                && e.c.is_none()
+                && e.r.is_none()
+            {
                 return None;
             }
             fields(
@@ -247,6 +253,9 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
                 vec![
                     e.area.and_then(|a| some("area", move |w| area(w, &a))),
                     int_field("mods", mods),
+                    int_field("button", button),
+                    int_field("c", e.c),
+                    int_field("r", e.r),
                 ],
             );
         }

@@ -73,7 +73,8 @@ split.feed(&program_output, &mut |o| match o {
   alone.
 - **`encode_event`**: an event, its detail written from what the
   `hotty::Event` carries for its kind, each field of the type SPEC §3.3
-  gives it. A relay that renames an event's surface passes its detail on
+  gives it; a `press` writes `button` only when it is not 0 (a secondary
+  press is 2, with `c` and `r`, SPEC §9). A relay that renames an event's surface passes its detail on
   as it came.
 
 Nothing written is compressed: a host never compresses (SPEC §3.3).
