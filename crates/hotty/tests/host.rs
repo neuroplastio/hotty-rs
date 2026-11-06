@@ -526,11 +526,12 @@ fn the_capabilities_read_back() {
     assert_eq!(r.caps, Some(want), "an int is held within 2^53 - 1");
     assert_eq!(r.n, Some(1));
 
+    assert_eq!(r.caps.as_ref().and_then(|c| c.v.as_deref()), Some("0.7"));
     let old = msg(&[("a", "q"), ("n", "1"), ("v", "0.3")], b"");
     let r = reply_of(reply_query(&old, &caps));
     assert_eq!(
         (r.ok, r.code.as_deref(), r.detail.as_deref()),
-        (false, Some("EVERSION"), Some(VERSION))
+        (false, Some("EVERSION"), Some("0.6,0.7"))
     );
     assert_eq!(
         hotty::host::caps_body(&Caps::default()),
@@ -1070,4 +1071,76 @@ fn the_chunks_after_one_too_large_to_hold_are_dropped_too() {
     let got = with_max(&input, 1024);
     assert_eq!(got.invalid, ["hotty command too large"]);
     assert_eq!(got.commands, [msg(&[("a", "del"), ("s", "x")], b"")]);
+}
+
+// --- the versions (SPEC §4, §15) ---------------------------------------------
+
+#[test]
+fn the_query_lists_both_versions() {
+    assert_eq!(VERSION, "0.7");
+    assert_eq!(VERSIONS, ["0.7", "0.6"]);
+    let q = command(query(1));
+    assert_eq!(q.get("v"), Some("0.6,0.7"));
+}
+
+fn version_of(r: &Reply) -> Option<&str> {
+    r.caps.as_ref().and_then(|c| c.v.as_deref())
+}
+
+#[test]
+fn a_host_answers_a_query_in_the_highest_version_it_shares() {
+    for (listed, want) in [
+        ("0.6,0.7", Some("0.7")),
+        ("0.7,0.6", Some("0.7")),
+        ("0.6", Some("0.6")),
+        ("0.7", Some("0.7")),
+        ("0.5,0.6,99.0", Some("0.6")),
+        ("0.5", None),
+        ("0.60", None),
+        ("", None),
+    ] {
+        let q = msg(&[("a", "q"), ("n", "1"), ("v", listed)], b"");
+        assert_eq!(hotty::host::answer_in(&q), want, "v={listed}");
+        assert_eq!(hotty::host::speaks(&q), want.is_some(), "v={listed}");
+        let r = reply_of(reply_query(&q, &Caps::default()));
+        match want {
+            Some(v) => assert_eq!((r.ok, version_of(&r)), (true, Some(v)), "v={listed}"),
+            None => assert_eq!(
+                (r.ok, r.code.as_deref(), r.detail.as_deref()),
+                (false, Some("EVERSION"), Some("0.6,0.7")),
+                "v={listed}"
+            ),
+        }
+    }
+    let none = msg(&[("a", "q"), ("n", "1")], b"");
+    assert_eq!(hotty::host::answer_in(&none), None);
+}
+
+#[test]
+fn the_detector_takes_either_version_and_refuses_others() {
+    for (v, native) in [
+        ("0.6", true),
+        ("0.7", true),
+        ("99.0", false),
+        ("0.5", false),
+    ] {
+        let mut d = Detector::new(1);
+        d.start(0);
+        let caps = Caps {
+            v: Some(v.into()),
+            ..Caps::default()
+        };
+        let r = reply_of(reply_ok(
+            &command(query(1)),
+            &[],
+            &hotty::host::caps_body(&caps),
+        ));
+        assert!(d.reply(&r, 10), "v={v}: it answers the query");
+        assert_eq!(
+            d.state(),
+            if native { State::Native } else { State::Text },
+            "v={v}"
+        );
+        assert_eq!(d.caps().and_then(|c| c.v.as_deref()), native.then_some(v));
+    }
 }

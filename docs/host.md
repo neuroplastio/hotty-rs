@@ -61,15 +61,19 @@ split.feed(&program_output, &mut |o| match o {
   and a relay that places the surface again with `place` passes it on, as
   it does `z`.
 - **`quiet_of`** says how much of a reply a command asks for, and
-  **`speaks`** whether a query lists the version this SDK speaks.
+  **`answer_in`** the version a query is answered in, the highest of
+  `hotty::VERSIONS` (0.7 and 0.6) it lists, or `None`; **`speaks`** whether
+  it lists one.
 
 ## Writing back
 
 - **`reply_ok`, `reply_err`**: a reply that echoes the command's `n` and
   `s` and names its action, with the keys a reply adds (a placement's `c`
   and `r`) or the error's code and detail.
-- **`reply_query`**: the capabilities to a query that lists this version,
-  and `EVERSION` to one that doesn't. **`caps_body`** is the capabilities
+- **`reply_query`**: the capabilities to a query that lists a version of
+  `VERSIONS`, with `v` set to `answer_in`'s (a host that speaks 0.6 too keeps
+  that session as 0.6 has it, HOST.md §4), and `EVERSION` to one that
+  doesn't, its detail `0.6,0.7`. **`caps_body`** is the capabilities
   alone.
 - **`encode_event`**: an event, its detail written from what the
   `hotty::Event` carries for its kind, each field of the type SPEC §3.3

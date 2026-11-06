@@ -98,8 +98,13 @@ pub const CHUNK: usize = 4096;
 pub const MAX_SIZE: u32 = 1000;
 /// The longest surface name (SPEC §5).
 pub const MAX_NAME: usize = 64;
-/// The protocol version this SDK speaks, which its query lists (SPEC §4).
-pub const VERSION: &str = "0.6";
+/// The protocol version this SDK is of: the highest it speaks (SPEC §4).
+pub const VERSION: &str = "0.7";
+/// The versions this SDK speaks, highest first: `0.7`, and `0.6` too
+/// (SPEC §15, SDK.md §3.8). Its query lists them lowest first, comma-separated (`0.6,0.7`), and it
+/// takes a host that answers in any of them; the capabilities' `v` says
+/// which one it met.
+pub const VERSIONS: &[&str] = &["0.7", "0.6"];
 /// The most bytes a [`Decoder`] decodes one message to unless its `max`
 /// says otherwise (SDK.md §3.6): 16 MiB.
 pub const DEFAULT_MAX: usize = 16 << 20;

@@ -7,10 +7,14 @@ them. It follows the hotty repository's SDK.md: the same two layers, names
 and defaults as the other SDKs, and every SDK section of the conformance
 vectors.
 
-It speaks hotty 0.6: a host's replies and events carry msgpack bodies (SPEC
-§3.3), its query lists the version it speaks (`a=q:n=1:v=0.6`, SPEC §4), and
-keys are named as myelin key names 0.1 names them (SPEC §10.4). A terminal of
-another hotty version is no host to it, and the program draws in cells.
+It speaks hotty 0.7, and 0.6 too (`hotty::VERSIONS`, SPEC §15): a host's
+replies and events carry msgpack bodies (SPEC §3.3), its query lists the
+versions it speaks (`a=q:n=1:v=0.6,0.7`, SPEC §4), and keys are named as myelin
+key names 0.1 names them (SPEC §10.4). A host that answers in either is a host
+to it, and the capabilities' `v` (`Caps::v`) says which one the program met: a
+0.6 host sends no secondary press, so the keys open a program's menus there
+(SDK.md §3.8, §4.7). A terminal of another hotty version is no host to it, and
+the program draws in cells.
 
 | crate | what it is | SDK.md |
 | --- | --- | --- |

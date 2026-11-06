@@ -101,7 +101,7 @@ fn serve(
 fn reply_to(c: &Control) -> Vec<u8> {
     let a = c.action();
     if a == "q" {
-        if c.get("v") == Some("0.6") {
+        if c.get("v") == Some("0.6,0.7") {
             let ctl = Control::from([("a", "ok"), ("n", c.get("n").unwrap()), ("re", "q")]);
             return encode_plain(&ctl, CAPS_06).into_bytes();
         }

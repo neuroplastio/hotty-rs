@@ -30,7 +30,7 @@ fn a_host_is_decided_by_its_reply_and_done_by_the_da1_behind_it() {
     let mut l = Link::new("t");
     l.detect(0, false);
     let q = l.take_output();
-    assert!(q.starts_with(b"\x1b]7279;a=q:n=1:v=0.6\x1b\\"));
+    assert!(q.starts_with(b"\x1b]7279;a=q:n=1:v=0.6,0.7\x1b\\"));
     assert!(l.waiting());
     l.bytes(&reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_06), 10);
     assert!(l.decided() && l.native() && !l.detected());

@@ -21,7 +21,7 @@
 
 use std::fmt;
 
-use crate::VERSION;
+use crate::VERSIONS;
 use crate::control::Control;
 use crate::encode::encode;
 use crate::msgpack::Writer;
@@ -215,7 +215,8 @@ impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut c = Control::from([("a", "q")]);
         c.push("n", self.n.to_string());
-        c.push("v", VERSION);
+        let listed: Vec<&str> = VERSIONS.iter().rev().copied().collect();
+        c.push("v", listed.join(","));
         if self.late {
             c.push("late", "1");
         }
@@ -231,8 +232,8 @@ impl From<Query> for String {
 }
 
 /// Asks whether the terminal is a hotty host that speaks
-/// [`VERSION`](crate::VERSION), fenced by Primary Device Attributes (SPEC §4):
-/// `a=q:n=<n>:v=0.6`, then `ESC [ c`. A host replies to the query, numbered
+/// a version in [`VERSIONS`](crate::VERSIONS), fenced by Primary Device
+/// Attributes (SPEC §4): `a=q:n=<n>:v=0.6,0.7`, then `ESC [ c`. A host replies to the query, numbered
 /// `n`, before the DA1 answer every terminal sends: its capabilities, or
 /// `EVERSION` when it speaks no version the query lists. A
 /// [`Detector`](crate::Detector) sends it and reads the answers.

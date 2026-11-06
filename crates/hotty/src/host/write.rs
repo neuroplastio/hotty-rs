@@ -10,9 +10,9 @@ use crate::control::Control;
 use crate::encode::encode_plain;
 use crate::messages::{Area, Caps, Error, Event, Message};
 use crate::msgpack::Writer;
-use crate::{VERSION, code, kind};
+use crate::{VERSIONS, code, kind};
 
-use super::read::speaks;
+use super::read::answer_in;
 
 const MAX_INT: i64 = (1 << 53) - 1;
 
@@ -64,21 +64,28 @@ pub fn error_body(code: &str, detail: &str) -> Vec<u8> {
     w.finish()
 }
 
-/// A host's answer to a query (SPEC §4), for a host that speaks only
-/// [`VERSION`]: its capabilities when the query lists it ([`speaks`]), and
-/// `EVERSION` naming it otherwise. `caps.v` should be `VERSION`.
+/// A host's answer to a query (SPEC §4), for a host that speaks
+/// [`VERSIONS`]: its capabilities when the query lists one, with `v` set to
+/// the version it answers in ([`answer_in`], the highest the query shares),
+/// and `EVERSION` otherwise, its detail the versions spoken, comma-separated
+/// and lowest first, as a query lists them. The caps' own `v` is replaced; the host speaks the
+/// answered version to the program from then on.
 pub fn reply_query(query: &Message, caps: &Caps) -> String {
-    if !speaks(query) {
+    let Some(v) = answer_in(query) else {
         return reply_err(
             query,
             &Error {
                 code: code::EVERSION.to_string(),
-                detail: VERSION.to_string(),
+                detail: VERSIONS.iter().rev().copied().collect::<Vec<_>>().join(","),
                 ..Error::default()
             },
         );
-    }
-    reply_caps(query, caps)
+    };
+    let caps = Caps {
+        v: Some(v.to_string()),
+        ..caps.clone()
+    };
+    reply_caps(query, &caps)
 }
 
 /// The capabilities, as the body of the ok to a query.

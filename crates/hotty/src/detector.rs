@@ -1,7 +1,7 @@
 //! Whether the terminal is a host (SDK.md §3.8): a state machine with the
 //! time passed in, in milliseconds.
 
-use crate::VERSION;
+use crate::VERSIONS;
 use crate::commands::query;
 use crate::messages::{Caps, Reply};
 
@@ -30,7 +30,8 @@ pub enum State {
 /// SDK.md §3.8).
 ///
 /// A reply to the query makes it one when it is `a=ok` and its capabilities
-/// decode and name [`VERSION`]; any other reply to the query, an error
+/// decode and name one of [`VERSIONS`] (the capabilities' `v` says which
+/// the host answers in, and speaks from then on); any other reply to the query, an error
 /// (`EVERSION` or another) or capabilities that do not decode or name
 /// another version, makes it [`State::Text`] at once. Every input first lets
 /// the time pass: whatever was due at or before `now` happens before the
@@ -179,7 +180,7 @@ impl Detector {
     /// A reply arrived. Returns whether it answers the query (`re=q`, the
     /// query's `n`, `a=ok` or `a=err`): it is detection's whenever it
     /// arrives, and the caller swallows it. The first decides: a host when
-    /// it is `a=ok` with capabilities that decode and name [`VERSION`],
+    /// it is `a=ok` with capabilities that decode and name one of [`VERSIONS`],
     /// text otherwise, and done when the DA1 behind it arrives or 300 ms
     /// later. A late one changes nothing, unless the query asked for it:
     /// then the first that makes the terminal a host does.
@@ -191,7 +192,7 @@ impl Detector {
         let caps = r
             .caps
             .as_ref()
-            .filter(|c| r.ok && c.v.as_deref() == Some(VERSION));
+            .filter(|c| r.ok && c.v.as_deref().is_some_and(|v| VERSIONS.contains(&v)));
         match self.state {
             State::Detecting => {
                 self.state = if caps.is_some() {

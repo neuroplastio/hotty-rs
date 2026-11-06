@@ -34,8 +34,8 @@ mod split;
 mod write;
 
 pub use read::{
-    ControlKind, control_kind, cursor_below, delta_of, field_fits, field_of, menu_of, menu_show_of,
-    placement_of, quiet_of, speaks, touch_of,
+    ControlKind, answer_in, control_kind, cursor_below, delta_of, field_fits, field_of, menu_of,
+    menu_show_of, placement_of, quiet_of, speaks, touch_of,
 };
 pub use split::{Output, Seq, Splitter};
 pub use write::{

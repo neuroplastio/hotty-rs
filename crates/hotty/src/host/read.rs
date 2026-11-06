@@ -6,7 +6,7 @@ use crate::commands::{
 };
 use crate::messages::{Error, Message};
 use crate::msgpack::{self, Value};
-use crate::{MAX_SIZE, OPS, VERSION, code};
+use crate::{MAX_SIZE, OPS, VERSIONS, code};
 
 /// The `EINVAL` a host answers a command with: what was wrong, and the op
 /// at fault in a delta.
@@ -56,14 +56,24 @@ pub fn quiet_of(m: &Message) -> Quiet {
     }
 }
 
-/// Whether a query lists [`VERSION`] among the versions the program speaks
-/// (`v`, comma-separated, SPEC §4). A host that speaks only this version
-/// answers such a query with its capabilities, and any other with
-/// `EVERSION` ([`reply_query`](crate::host::reply_query)).
+/// The version a host answers a query in (`v`, comma-separated, SPEC §4):
+/// the highest of [`VERSIONS`] the query lists, or `None` when it lists none
+/// (or no `v`). The host speaks that version to the program from then on,
+/// and the capabilities' `v` is it ([`reply_query`](crate::host::reply_query)).
+pub fn answer_in(query: &Message) -> Option<&'static str> {
+    let listed = query.get("v")?;
+    VERSIONS
+        .iter()
+        .copied()
+        .find(|v| listed.split(',').any(|l| l == *v))
+}
+
+/// Whether a query lists a version of [`VERSIONS`] (`v`, comma-separated,
+/// SPEC §4): whether [`answer_in`] has one. A host that speaks these answers
+/// such a query with its capabilities, and any other with `EVERSION`
+/// ([`reply_query`](crate::host::reply_query)).
 pub fn speaks(query: &Message) -> bool {
-    query
-        .get("v")
-        .is_some_and(|v| v.split(',').any(|v| v == VERSION))
+    answer_in(query).is_some()
 }
 
 /// Reads a delta's ops (SPEC §6.1), checking the whole body before any op
