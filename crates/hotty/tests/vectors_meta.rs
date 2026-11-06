@@ -9,7 +9,7 @@ fn the_vectors_are_this_sdks_version() {
 }
 
 /// The crates' MAJOR.MINOR is the spec version this SDK speaks, and PATCH
-/// their own (gov P-5 rule 6): 0.6.x speaks hotty 0.6.
+/// their own (gov P-5 rule 6): 0.7.x speaks hotty 0.7, and 0.6 too.
 #[test]
 fn the_crates_are_this_sdks_version() {
     let v = env!("CARGO_PKG_VERSION");
