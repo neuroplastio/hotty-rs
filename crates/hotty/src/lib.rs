@@ -217,7 +217,7 @@ pub mod code {
 }
 
 /// The delta ops (SPEC §6.1), which [`Op::op`] names.
-pub const OPS: [&str; 13] = [
+pub const OPS: [&str; 14] = [
     "morph", "inner", "replace", "append", "prepend", "before", "after", "remove", "attr",
-    "unattr", "text", "var", "reveal",
+    "unattr", "text", "var", "reveal", "scroll",
 ];

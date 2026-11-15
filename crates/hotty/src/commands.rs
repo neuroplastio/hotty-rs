@@ -409,7 +409,7 @@ pub struct Op {
     /// What it does: one of [`OPS`](crate::OPS).
     pub op: String,
     /// The id of the element, as the document has it; empty for a morph of
-    /// the whole tree, and sent only when not.
+    /// the whole tree or scrolling the root, and sent only when not.
     pub target: String,
     /// The name of the attribute or the custom property, for `attr`,
     /// `unattr` and `var`.
@@ -501,6 +501,12 @@ pub fn reveal_op(target: &str, where_: &str) -> Op {
     op("reveal", target, "", value)
 }
 
+/// Scrolls as a key bound to the scroll action would, from the target
+/// outward (empty: the root), by one of the host's steps (SPEC §6.1).
+pub fn scroll_op(target: &str, action: &str) -> Op {
+    op("scroll", target, "", Some(action.to_string()))
+}
+
 fn takes_key(op: &str) -> bool {
     matches!(op, "attr" | "unattr" | "var")
 }
@@ -578,6 +584,11 @@ pub fn morph_to(surface: &str, target: &str, html: &str) -> Cmd {
 /// `""` for the nearest.
 pub fn reveal(surface: &str, target: &str, where_: &str) -> Cmd {
     delta(surface, &[reveal_op(target, where_)])
+}
+
+/// A [`delta`] of one [`scroll_op`]: a count is as many ops (SPEC §6.1).
+pub fn scroll(surface: &str, target: &str, action: &str) -> Cmd {
+    delta(surface, &[scroll_op(target, action)])
 }
 
 /// A change to a control (SPEC §6.4), made against its revision: what

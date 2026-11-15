@@ -81,9 +81,10 @@ pub fn speaks(query: &Message) -> bool {
 /// fault where one is, when the body does not decode or is not `{"ops":
 /// [op]}` with at least one op; an op is not a map, holds `op`, `t`, `k` or
 /// `v` as anything but a str, or names an op the table does not have; an op
-/// lacks the `t` it needs (every op but `morph`, whose empty `t` is none) or
+/// lacks the `t` it needs (every op but `morph`, whose empty `t` is none,
+/// and `scroll`, whose empty `t` is the root) or
 /// the `k` of `attr`, `unattr` and `var`; or `reveal` has a `v` other than
-/// `start` or `end`. A `v` an op does not take is dropped, and so is a key
+/// `start` or `end`, or `scroll` has no scroll action. A `v` an op does not take is dropped, and so is a key
 /// the table does not name.
 pub fn delta_of(m: &Message) -> Result<Vec<Op>, Error> {
     let Some(root) = map_of(m) else {
@@ -110,7 +111,7 @@ pub fn delta_of(m: &Message) -> Result<Vec<Op>, Error> {
             return Err(at(format!("op {i}: unknown op {name}")));
         }
         let (t, k, v) = (field("t")?, field("k")?, field("v")?);
-        if name != "morph" && t.as_deref().is_none_or(str::is_empty) {
+        if !matches!(name.as_str(), "morph" | "scroll") && t.as_deref().is_none_or(str::is_empty) {
             return Err(at(format!("op {i}: {name} needs t")));
         }
         if matches!(name.as_str(), "attr" | "unattr" | "var")
@@ -121,6 +122,9 @@ pub fn delta_of(m: &Message) -> Result<Vec<Op>, Error> {
         let v = v.filter(|_| !matches!(name.as_str(), "remove" | "unattr"));
         if name == "reveal" && v.as_deref().is_some_and(|v| !matches!(v, "start" | "end")) {
             return Err(at(format!("op {i}: reveal takes start, end or nothing")));
+        }
+        if name == "scroll" && !v.as_deref().is_some_and(crate::keys::is_scroll) {
+            return Err(at(format!("op {i}: scroll needs a scroll action")));
         }
         out.push(Op {
             op: name,

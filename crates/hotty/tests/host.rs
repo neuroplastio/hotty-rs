@@ -46,6 +46,8 @@ fn a_delta_reads_back_as_its_ops() {
         remove("old"),
         reveal_op("s3", "end"),
         reveal_op("s4", ""),
+        scroll_op("", "scroll-down"),
+        scroll_op("s3", "scroll-end"),
         morph("", "<p id=a>1</p>"),
         text("empty", ""),
     ];
@@ -67,6 +69,9 @@ fn a_delta_a_host_refuses_names_the_op_at_fault() {
         (bad("shout", "a", "", Some("x")), 1),
         (bad("text", "", "", Some("x")), 1),
         (bad("attr", "a", "", Some("x")), 1),
+        (bad("scroll", "", "", Some("line-next")), 1),
+        (bad("scroll", "a", "", Some("")), 1),
+        (bad("scroll", "", "", None), 1),
     ] {
         let e = refused(&[text("a", "ok"), op.clone()]);
         assert_eq!((e.code.as_str(), e.op), ("EINVAL", Some(at)), "{op:?}");

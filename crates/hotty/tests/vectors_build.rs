@@ -141,6 +141,7 @@ fn build(name: &str, a: &Value, o: &Value, q_first: bool) -> String {
         "remove_attr" => cmd(remove_attr(s(a, "surface"), s(a, "target"), s(a, "name"))),
         "morph_to" => cmd(morph_to(s(a, "surface"), s(a, "target"), s(a, "html"))),
         "reveal" => cmd(reveal(s(a, "surface"), s(a, "target"), s(a, "where"))),
+        "scroll" => cmd(scroll(s(a, "surface"), s(a, "target"), s(a, "action"))),
         "set_field" => {
             let c = &a["change"];
             let int = |k: &str| c[k].as_i64();
