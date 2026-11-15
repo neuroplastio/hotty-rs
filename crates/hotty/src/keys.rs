@@ -52,8 +52,8 @@ pub const SCROLL_ACTIONS: [&str; 10] = [
 ];
 
 /// The actions a keymap binds (SPEC §10.2): a text field's, `program`,
-/// `prefix`, and the scroll actions.
-pub const ACTIONS: [&str; 38] = [
+/// `prefix`, `default`, and the scroll actions.
+pub const ACTIONS: [&str; 39] = [
     "char-backward",
     "char-forward",
     "word-backward",
@@ -82,6 +82,7 @@ pub const ACTIONS: [&str; 38] = [
     "paste",
     "undo",
     "redo",
+    "default",
     "scroll-up",
     "scroll-down",
     "scroll-left",
@@ -1057,12 +1058,14 @@ pub struct Keymap {
     written: Vec<String>,
     multiline: bool,
     modifier: Mod,
+    base: Option<Box<Keymap>>,
 }
 
 /// Reads a `data-keys` value as SPEC §10.2 has hosts read it: bindings
 /// separated by ASCII white space, each `key=action`, split at its last
 /// `=`, each key read with [`read_key`]; dropping a key that does not
-/// parse, an action it does not know, and `tab`, `shift+tab` and `escape`.
+/// parse, an action it does not know, `shift+tab`, `escape`, and `tab`
+/// except when bound to `program` or `default`, which a field honours.
 /// On `ctrl`, `mod+a` and `ctrl+a` are one key, the later binding's.
 ///
 /// An element that is not a text field has the keymap of its `data-keys`
@@ -1137,6 +1140,7 @@ const SUPER_KEYS: &[(&str, &str)] = &[
 /// multi-line field, then each `data-keys` value in turn, the root's first.
 /// A binding to a scroll action is left out where it stands, in its own
 /// value too: it neither acts nor overrides an earlier binding of its key.
+/// A binding to `default` gives the key back to this field's default keymap.
 pub fn resolve<'a>(
     platform: &Platform,
     multiline: bool,
@@ -1159,6 +1163,7 @@ pub fn resolve<'a>(
             m.bind(&k, &a);
         }
     }
+    m.base = Some(Box::new(m.clone()));
     for v in values {
         for (k, a) in bindings(v).filter(|(_, a)| !is_scroll(a)) {
             m.bind(k, a);
@@ -1178,8 +1183,8 @@ impl Keymap {
 
     /// Binds a key to an action, as a later binding in a `data-keys` value
     /// does; false, binding nothing, where a host ignores the binding (a
-    /// key that does not parse, an action it does not know, `tab`,
-    /// `shift+tab` or `escape`).
+    /// key that does not parse, an action it does not know, `shift+tab`,
+    /// `escape`, or `tab` except to `program` or `default`).
     pub fn bind(&mut self, key: &str, action: &str) -> bool {
         let (Some(k), Some(w)) = (
             read(key, Some(self.modifier), false),
@@ -1187,7 +1192,10 @@ impl Keymap {
         ) else {
             return false;
         };
-        if !ACTIONS.contains(&action) || matches!(k.as_str(), "tab" | "shift+tab" | "escape") {
+        if !ACTIONS.contains(&action)
+            || matches!(k.as_str(), "shift+tab" | "escape")
+            || (k == "tab" && !matches!(action, "program" | "default"))
+        {
             return false;
         }
         match self.bindings.iter().position(|(b, _)| *b == k) {
@@ -1233,6 +1241,9 @@ impl Keymap {
     /// that is not a character and that is not bound itself, to the key
     /// without `shift` (SPEC §10.2).
     fn bound(&self, key: &str) -> Option<&str> {
+        if matches!(key, "shift+tab" | "escape") {
+            return None;
+        }
         self.get(key).or_else(|| {
             let k = KeyParts::split(key);
             if !k.shift() || k.kind() == Kind::Character {
@@ -1275,6 +1286,10 @@ impl Keymap {
             return None;
         }
         match self.bound(&k) {
+            Some("default") => self
+                .base
+                .as_ref()
+                .map_or_else(|| key_text(&k).map(|_| INSERT), |base| base.lookup(&k)),
             Some("program" | "prefix") => None,
             Some(a) if is_multiline(a) && !self.multiline => None,
             Some(a) => Some(a),
@@ -1297,8 +1312,16 @@ impl Keymap {
     /// fallback of [`Keymap::binds`]. A host asks it of a focused element's
     /// keymap, and the key reaches the program before the element or a
     /// scroll uses it.
+    /// `tab` reaches the program only on a field's keymap, from [`resolve`],
+    /// where bound to `program`; otherwise it moves focus (SPEC §10.2).
     pub fn program(&self, key: &str) -> bool {
-        parse_key(key).is_some_and(|k| matches!(self.bound(&k), Some("program" | "prefix")))
+        parse_key(key).is_some_and(|k| {
+            if k == "tab" {
+                self.base.is_some() && self.bound(&k) == Some("program")
+            } else {
+                matches!(self.bound(&k), Some("program" | "prefix"))
+            }
+        })
     }
 
     /// Whether the keymap binds a key to `prefix`, with the same fallback:

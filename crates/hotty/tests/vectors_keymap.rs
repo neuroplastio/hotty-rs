@@ -88,5 +88,8 @@ fn keymap() {
         for (key, want) in each(&v["binds"]) {
             assert_eq!(Some(m.binds(key)), want.as_bool(), "binds({key:?})");
         }
+        for (key, want) in each(&v["program"]) {
+            assert_eq!(Some(m.program(key)), want.as_bool(), "program({key:?})");
+        }
     });
 }
