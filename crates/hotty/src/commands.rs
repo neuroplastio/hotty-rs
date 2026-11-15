@@ -83,7 +83,7 @@ impl Cmd {
 
     /// The command's control as it goes out: its keys, then `d`, `scroll`,
     /// `n` and `q` where they apply. `q` goes out only where the wire does
-    /// not imply it: 0 with `n`, 1 without (SPEC §3.5).
+    /// not imply it: 0 with `n` or for `hit`, 1 otherwise (SPEC §3.5).
     pub fn control(&self) -> Control {
         let mut c = self.control.clone();
         if self.detached {
@@ -92,7 +92,7 @@ impl Cmd {
         if self.scroll != 0 {
             c.set("scroll", self.scroll.to_string());
         }
-        let implied = if self.n.is_some() {
+        let implied = if self.n.is_some() || self.control.action() == "hit" {
             Quiet::ReplyAlways
         } else {
             Quiet::ReplyOnError
@@ -399,6 +399,16 @@ pub fn hide(surface: &str) -> Cmd {
         [],
         Quiet::NoReply,
     )
+}
+
+/// Asks which element is at a surface's cell, counted from its top-left
+/// cell and negative above it and to its left (SPEC §9.7). A query, answered
+/// at quiet level 0 with or without a number; [`Cmd::q`] may change it.
+pub fn hit(surface: &str, c: i64, r: i64) -> Cmd {
+    let mut control = Control::from([("a", "hit"), ("s", surface)]);
+    control.push("c", c.to_string());
+    control.push("r", r.to_string());
+    Cmd::new(control, [], Quiet::ReplyAlways)
 }
 
 /// One change of a delta (SPEC §6.1): what to do, to which element, with

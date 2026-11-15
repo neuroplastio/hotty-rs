@@ -67,6 +67,12 @@ impl Message {
         if ok {
             if re == "q" {
                 r.caps = body::read(&self.payload, &body::CAPS).map(|b| body::caps(&b, false));
+            } else if re == "hit" {
+                r.hit = body::read(&self.payload, &body::HIT).map(|b| HitCell {
+                    t: body::str(&b, "t").unwrap_or_default(),
+                    tx: b.get("tx").and_then(Value::as_int),
+                    ty: b.get("ty").and_then(Value::as_int),
+                });
             }
         } else if let Some(b) = body::read(&self.payload, &body::ERROR) {
             r.code = body::str(&b, "code");
@@ -225,6 +231,9 @@ pub struct Reply {
     pub detail: Option<String>,
     /// The capabilities: the body of an ok reply to `q`, when it decodes.
     pub caps: Option<Caps>,
+    /// What a cell holds: the body of an ok reply to `hit`, when it decodes
+    /// (SPEC §9.7).
+    pub hit: Option<HitCell>,
     /// The reply as it came.
     pub message: Message,
 }
@@ -243,6 +252,18 @@ impl Reply {
             op: self.op,
         })
     }
+}
+
+/// What a cell of a surface holds (SPEC §9.7): the element a drag would
+/// name there, and its steps where it has them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HitCell {
+    /// The element's id, empty when there is none.
+    pub t: String,
+    /// The horizontal step in the target, absent where it has none.
+    pub tx: Option<i64>,
+    /// The vertical step in the target, absent where it has none.
+    pub ty: Option<i64>,
 }
 
 /// An error reply (SPEC §3.6) as an error: what was refused and why,
@@ -586,6 +607,7 @@ mod body {
     use Ty::{Array, Bool, Each, Float, Int, Map, Str};
 
     pub(super) const ERROR: Ty = Map(&[("code", Str), ("detail", Str)]);
+    pub(super) const HIT: Ty = Map(&[("t", Str), ("tx", Int), ("ty", Int)]);
 
     const STRS: Ty = Array(&Str);
 

@@ -55,6 +55,7 @@ fn reply_json(r: &Reply) -> Value {
         "code": opt(r.code.clone()),
         "detail": opt(r.detail.clone()),
         "op": opt(r.op),
+        "hit": opt(r.hit.as_ref().map(|h| json!({ "t": h.t, "tx": opt(h.tx), "ty": opt(h.ty) }))),
     })
 }
 

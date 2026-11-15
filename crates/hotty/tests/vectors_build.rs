@@ -121,6 +121,11 @@ fn build(name: &str, a: &Value, o: &Value, q_first: bool) -> String {
             &placement(&a["placement"]),
         )),
         "hide" => cmd(hide(s(a, "surface"))),
+        "hit" => cmd(hit(
+            s(a, "surface"),
+            a["c"].as_i64().unwrap(),
+            a["r"].as_i64().unwrap(),
+        )),
         "delta" => {
             let ops: Vec<Op> = a["ops"].as_array().unwrap().iter().map(op_of).collect();
             cmd(delta(s(a, "surface"), &ops))

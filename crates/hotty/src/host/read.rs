@@ -51,7 +51,7 @@ pub fn quiet_of(m: &Message) -> Quiet {
         Some("0") => Quiet::ReplyAlways,
         Some("1") => Quiet::ReplyOnError,
         Some("2") => Quiet::NoReply,
-        _ if m.action() == "q" || m.get("n").is_some() => Quiet::ReplyAlways,
+        _ if matches!(m.action(), "q" | "hit") || m.get("n").is_some() => Quiet::ReplyAlways,
         _ => Quiet::ReplyOnError,
     }
 }
@@ -74,6 +74,36 @@ pub fn answer_in(query: &Message) -> Option<&'static str> {
 /// ([`reply_query`](crate::host::reply_query)).
 pub fn speaks(query: &Message) -> bool {
     answer_in(query).is_some()
+}
+
+/// The cell a program asks a surface about (SPEC §9.7), counted from the
+/// surface's top-left cell and negative above it and to its left.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Hit {
+    /// The column in the surface.
+    pub c: i64,
+    /// The row in the surface.
+    pub r: i64,
+}
+
+/// Reads a hit query's cell (SPEC §9.7). A missing `c` or `r`, or one that
+/// is not a whole decimal number with an optional minus, is `EINVAL`.
+/// The host checks the surface's existence and attachment itself.
+pub fn hit_of(m: &Message) -> Result<Hit, Error> {
+    let cell = |key| {
+        let value = m.get(key).unwrap_or_default();
+        let digits = value.strip_prefix('-').unwrap_or(value);
+        if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
+            if let Ok(n) = value.parse() {
+                return Ok(n);
+            }
+        }
+        Err(invalid(m, format!("hit needs a whole decimal {key}"), None))
+    };
+    Ok(Hit {
+        c: cell("c")?,
+        r: cell("r")?,
+    })
 }
 
 /// Reads a delta's ops (SPEC §6.1), checking the whole body before any op

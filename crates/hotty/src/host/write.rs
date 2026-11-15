@@ -8,7 +8,7 @@
 
 use crate::control::Control;
 use crate::encode::encode_plain;
-use crate::messages::{Area, Caps, Error, Event, Message};
+use crate::messages::{Area, Caps, Error, Event, HitCell, Message};
 use crate::msgpack::Writer;
 use crate::{VERSIONS, code, kind};
 
@@ -91,6 +91,33 @@ pub fn reply_query(query: &Message, caps: &Caps) -> String {
 /// The capabilities, as the body of the ok to a query.
 pub fn reply_caps(query: &Message, caps: &Caps) -> String {
     reply_ok(query, &[], &caps_body(caps))
+}
+
+/// A host's answer to a hit query (SPEC §9.7): the element a drag would
+/// name at that cell and its steps, each absent where it has none.
+pub fn reply_hit(query: &Message, hit: &HitCell) -> String {
+    reply_ok(query, &[], &hit_body(hit))
+}
+
+/// What a cell holds as a body (SPEC §9.7), leaving out an empty target
+/// and absent steps. With none it is an empty msgpack map.
+pub fn hit_body(hit: &HitCell) -> Vec<u8> {
+    let mut w = Writer::new();
+    w.map(
+        usize::from(!hit.t.is_empty())
+            + usize::from(hit.tx.is_some())
+            + usize::from(hit.ty.is_some()),
+    );
+    if !hit.t.is_empty() {
+        w.kv_str("t", &hit.t);
+    }
+    for (key, value) in [("tx", hit.tx), ("ty", hit.ty)] {
+        if let Some(value) = value {
+            w.str(key);
+            int(&mut w, value);
+        }
+    }
+    w.finish()
 }
 
 /// The capabilities as a body (SPEC §4): each field they have, in the

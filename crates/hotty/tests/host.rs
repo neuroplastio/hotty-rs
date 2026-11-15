@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use hotty::host::{
     ControlKind, Output, Seq, Splitter, control_kind, cursor_below, delta_of, encode_event,
-    field_fits, field_of, menu_of, menu_show_of, placement_of, quiet_of, reply_caps, reply_err,
-    reply_ok, reply_query, speaks, touch_of,
+    field_fits, field_of, hit_of, menu_of, menu_show_of, placement_of, quiet_of, reply_caps,
+    reply_err, reply_hit, reply_ok, reply_query, speaks, touch_of,
 };
 use hotty::keys::{KeyParts, Kind, Mod, Platform, SHIFT, char_key, parse_keymap};
 use hotty::*;
@@ -32,6 +32,61 @@ fn command(out: impl std::fmt::Display) -> Message {
 
 fn msg(pairs: &[(&str, &str)], payload: &[u8]) -> Message {
     Message::new(pairs.iter().copied().collect(), payload)
+}
+
+#[test]
+fn a_hit_reads_a_signed_cell_and_answers_with_optional_steps() {
+    let query = command(hit("card", -3, 4).n(9));
+    assert_eq!(hit_of(&query).unwrap(), hotty::host::Hit { c: -3, r: 4 });
+    assert_eq!(quiet_of(&command(hit("card", 0, 0))), Quiet::ReplyAlways);
+    assert_eq!(
+        quiet_of(&command(hit("card", 0, 0).q(Quiet::NoReply))),
+        Quiet::NoReply
+    );
+    for h in [
+        HitCell::default(),
+        HitCell {
+            t: "row".into(),
+            tx: None,
+            ty: Some(0),
+        },
+        HitCell {
+            t: "row".into(),
+            tx: Some(2),
+            ty: Some(1),
+        },
+    ] {
+        let reply = command(reply_hit(&query, &h)).reply().unwrap();
+        assert_eq!(reply.hit, Some(h));
+        assert_eq!(reply.n, Some(9));
+        assert_eq!(reply.surface.as_deref(), Some("card"));
+    }
+}
+
+#[test]
+fn a_hit_refuses_missing_or_non_decimal_cells() {
+    for key in ["c", "r"] {
+        for bad in [
+            None,
+            Some(""),
+            Some("-"),
+            Some("+1"),
+            Some("1.0"),
+            Some(" 1"),
+            Some("1e2"),
+            Some("9223372036854775808"),
+        ] {
+            let mut query = command(hit("card", 0, 0));
+            query.control.remove(key);
+            if let Some(bad) = bad {
+                query.control.set(key, bad);
+            }
+            let err = hit_of(&query).unwrap_err();
+            assert_eq!(err.code, code::EINVAL);
+            assert_eq!(err.re, "hit");
+            assert_eq!(err.surface.as_deref(), Some("card"));
+        }
+    }
 }
 
 // --- a program's commands --------------------------------------------------
