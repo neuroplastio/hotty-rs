@@ -64,6 +64,7 @@ pub fn answer_in(query: &Message) -> Option<&'static str> {
     let listed = query.get("v")?;
     VERSIONS
         .iter()
+        .rev()
         .copied()
         .find(|v| listed.split(',').any(|l| l == *v))
 }
@@ -93,10 +94,11 @@ pub fn hit_of(m: &Message) -> Result<Hit, Error> {
     let cell = |key| {
         let value = m.get(key).unwrap_or_default();
         let digits = value.strip_prefix('-').unwrap_or(value);
-        if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
-            if let Ok(n) = value.parse() {
-                return Ok(n);
-            }
+        if !digits.is_empty()
+            && digits.bytes().all(|b| b.is_ascii_digit())
+            && let Ok(n) = value.parse()
+        {
+            return Ok(n);
         }
         Err(invalid(m, format!("hit needs a whole decimal {key}"), None))
     };

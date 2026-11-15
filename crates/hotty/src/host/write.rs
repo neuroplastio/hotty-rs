@@ -76,7 +76,7 @@ pub fn reply_query(query: &Message, caps: &Caps) -> String {
             query,
             &Error {
                 code: code::EVERSION.to_string(),
-                detail: VERSIONS.iter().rev().copied().collect::<Vec<_>>().join(","),
+                detail: VERSIONS.join(","),
                 ..Error::default()
             },
         );

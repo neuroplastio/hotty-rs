@@ -3,15 +3,15 @@
 use hotty::link::{Answer, Input, Known, Link};
 use hotty::{Caps, Control, Placement, doc, encode_plain, place};
 
-// {"v": "0.6"}, as a host writes it.
-const CAPS_06: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'6'];
+// {"v": "0.7"}, as a host writes it.
+const CAPS_07: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'7'];
 
 fn reply(pairs: &[(&str, &str)], body: &[u8]) -> Vec<u8> {
     encode_plain(&pairs.iter().copied().collect::<Control>(), body).into_bytes()
 }
 
 fn host_answer() -> Vec<u8> {
-    let mut b = reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_06);
+    let mut b = reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_07);
     b.extend_from_slice(b"\x1b[?62;22c");
     b
 }
@@ -30,11 +30,11 @@ fn a_host_is_decided_by_its_reply_and_done_by_the_da1_behind_it() {
     let mut l = Link::new("t");
     l.detect(0, false);
     let q = l.take_output();
-    assert!(q.starts_with(b"\x1b]7279;a=q:n=1:v=0.6,0.7\x1b\\"));
+    assert!(q.starts_with(b"\x1b]7279;a=q:n=1:v=0.7,0.8\x1b\\"));
     assert!(l.waiting());
-    l.bytes(&reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_06), 10);
+    l.bytes(&reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_07), 10);
     assert!(l.decided() && l.native() && !l.detected());
-    assert_eq!(l.caps().and_then(|c| c.v.as_deref()), Some("0.6"));
+    assert_eq!(l.caps().and_then(|c| c.v.as_deref()), Some("0.7"));
     l.bytes(b"\x1b[?62;22c", 12);
     assert!(l.detected());
     assert!(!l.waiting());
@@ -166,7 +166,7 @@ fn a_late_answer_makes_the_terminal_a_host() {
     assert!(l.detected() && !l.native());
     assert!(l.waiting(), "a late answer may still come");
     l.bytes(
-        &reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_06),
+        &reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_07),
         5000,
     );
     assert!(l.native());
@@ -184,7 +184,7 @@ fn closing_withdraws_a_late_query_no_answer_came_to() {
     assert_eq!(l.take_output(), b"\x1b]7279;a=q:q=2\x1b\\");
     // An answer after it reaches nothing.
     l.bytes(
-        &reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_06),
+        &reply(&[("a", "ok"), ("n", "1"), ("re", "q")], CAPS_07),
         1700,
     );
     assert!(!l.native());
