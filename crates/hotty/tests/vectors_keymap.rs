@@ -4,7 +4,7 @@
 
 mod common;
 
-use hotty::{Mod, Platform, TERMINAL_KEYS, parse_keymap, resolve};
+use hotty::{Mod, Platform, Reader, TERMINAL_KEYS, parse_keymap, resolve};
 use serde_json::Value;
 
 /// The vector's Platform: `ctrl` with the default edit shortcuts where
@@ -57,28 +57,22 @@ fn keymap() {
             assert_eq!(parse_keymap(&p, value).format(), format.as_str().unwrap());
             return;
         }
-        if v.get("lookup").is_none() {
-            // An element's keymap outside a text field: its data-keys
-            // values joined with a space, the root's first, and no default.
-            let m = parse_keymap(&p, &strs(&v["keys"]).join(" "));
-            for (key, want) in each(&v["program"]) {
-                assert_eq!(Some(m.program(key)), want.as_bool(), "program({key:?})");
-            }
-            for (key, want) in each(&v["prefix"]) {
-                assert_eq!(Some(m.prefix(key)), want.as_bool(), "prefix({key:?})");
-            }
-            for (key, want) in each(&v["scroll"]) {
-                assert_eq!(m.scroll(key), want.as_str(), "scroll({key:?})");
-            }
-            return;
-        }
-        let mut values = if terminal {
-            vec![TERMINAL_KEYS]
-        } else {
-            vec![]
+        let reader = match v["reader"].as_str() {
+            Some("input") => Reader::Input,
+            Some("multiline") => Reader::Multiline,
+            Some("button") => Reader::Button,
+            Some("select") => Reader::Select,
+            Some("date") => Reader::Date,
+            Some("element") => Reader::Element,
+            Some("selection") => Reader::Selection,
+            _ => panic!("unknown reader: {}", v["reader"]),
         };
-        values.extend(strs(&v["keys"]));
-        let m = resolve(&p, v["multiline"].as_bool().unwrap(), values);
+        let own = v["own"].as_str().unwrap_or_default();
+        let inner = terminal
+            .then_some(TERMINAL_KEYS)
+            .into_iter()
+            .chain(strs(&v["inner"]));
+        let m = resolve(&p, reader, own, inner);
         for (key, want) in each(&v["lookup"]) {
             assert_eq!(m.lookup(key), want.as_str(), "lookup({key:?})");
         }
@@ -90,6 +84,12 @@ fn keymap() {
         }
         for (key, want) in each(&v["program"]) {
             assert_eq!(Some(m.program(key)), want.as_bool(), "program({key:?})");
+        }
+        for (key, want) in each(&v["prefix"]) {
+            assert_eq!(Some(m.prefix(key)), want.as_bool(), "prefix({key:?})");
+        }
+        for (key, want) in each(&v["scroll"]) {
+            assert_eq!(m.scroll(key), want.as_str(), "scroll({key:?})");
         }
     });
 }

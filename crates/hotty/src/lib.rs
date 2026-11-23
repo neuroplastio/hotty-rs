@@ -80,8 +80,8 @@ pub use detector::{DETECT_AFTER_DA1, DETECT_AFTER_REPLY, DETECT_TIMEOUT, Detecto
 pub use encode::{PREFIX, ST, clean_value, encode, encode_plain};
 pub use field::Field;
 pub use keys::{
-    INSERT, Keymap, Mod, Platform, TERMINAL_KEYS, decode_keys, default_edit, key_text, parse_key,
-    parse_keymap, platform_of, read_key, resolve,
+    INSERT, Keymap, Mod, Platform, Reader, TERMINAL_KEYS, decode_keys, default_edit, key_text,
+    parse_key, parse_keymap, platform_of, read_key, resolve,
 };
 pub use messages::*;
 pub use names::{surface_name, valid_name};

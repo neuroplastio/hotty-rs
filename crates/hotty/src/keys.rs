@@ -7,17 +7,17 @@
 //! - [`parse_key`] reads a key's name as a document writes it, and
 //!   [`decode_keys`] reads the keys in what the terminal sends the program;
 //!   [`key_text`] is the text a key types.
-//! - A [`Keymap`] binds keys to actions. [`resolve`] builds a field's: the
-//!   default keymap for the [`Platform`], then each `data-keys` value, the
-//!   root's first. [`Keymap::lookup`] says what the field does with a key.
+//! - A [`Keymap`] binds keys to actions. [`resolve`] combines a reader's
+//!   defaults, its ancestors' `data-keys-inner` from the root down, and
+//!   its own `data-keys`. [`Keymap::lookup`] says what a field does with a key.
 //! - [`TERMINAL_KEYS`] is the SDK's keymap, the same in every SDK: a
-//!   program puts it in the `data-keys` of an element that holds its
+//!   program puts it in the `data-keys-inner` of an element that holds its
 //!   fields, and resolves the same keymap for its cells.
 //!
 //! ```
-//! use hotty::{INSERT, Platform, TERMINAL_KEYS, resolve};
+//! use hotty::{INSERT, Platform, Reader, TERMINAL_KEYS, resolve};
 //!
-//! let keys = resolve(&Platform::default(), false, [TERMINAL_KEYS]);
+//! let keys = resolve(&Platform::default(), Reader::Input, "", [TERMINAL_KEYS]);
 //! assert_eq!(keys.lookup("ctrl+w"), Some("delete-word-backward"));
 //! assert_eq!(keys.lookup("shift+a"), Some(INSERT));
 //! assert_eq!(keys.lookup("tab"), None); // not the field's: it moves focus
@@ -130,9 +130,9 @@ pub const INSERT: &str = "insert";
 
 /// The SDK's keymap (SDK.md §3.10), the same in every SDK: the keys of
 /// Bubble Tea's text input and text area, but `mod+a`, which selects all,
-/// as a `data-keys` value. A program puts it in the `data-keys` of an
+/// as a `data-keys` value. A program puts it in the `data-keys-inner` of an
 /// element that holds its fields, and gives its cells the same keymap,
-/// `resolve(platform, multiline, [TERMINAL_KEYS])`. It leaves `enter` to
+/// `resolve(platform, Reader::Input, "", [TERMINAL_KEYS])`. It leaves `enter` to
 /// SPEC's default keymap.
 pub const TERMINAL_KEYS: &str = concat!(
     "arrow_left=char-backward ctrl+b=char-backward arrow_right=char-forward ctrl+f=char-forward ",
@@ -1006,7 +1006,7 @@ impl Platform {
 
     // The edit shortcuts as a keymap.
     fn edit_keymap(&self) -> Keymap {
-        let mut m = Keymap::new(self.modifier, false);
+        let mut m = Keymap::new(self.modifier, Reader::Element);
         for (a, keys) in self.edit_shortcuts() {
             for k in keys {
                 m.bind(&k, &a);
@@ -1064,9 +1064,75 @@ pub fn default_edit(modifier: Mod) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
+/// The reader of a resolved keymap (SDK.md §3.10, SPEC §10.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Reader {
+    /// A single-line text field.
+    Input,
+    /// A multiline text field.
+    Multiline,
+    /// A button, link, summary, checkbox or radio button.
+    Button,
+    /// A select control.
+    Select,
+    /// A date or time input.
+    Date,
+    /// Any other element, or the surface with nothing focused.
+    #[default]
+    Element,
+    /// A text selection in the document (SPEC §11).
+    Selection,
+}
+
+impl Reader {
+    fn is_field(self) -> bool {
+        matches!(self, Self::Input | Self::Multiline)
+    }
+
+    fn uses(self, key: &str) -> bool {
+        if self.is_field() {
+            return key_text(key).is_some();
+        }
+        let parts = KeyParts::split(key);
+        if parts.mods & !SHIFT != 0 {
+            return false;
+        }
+        let value = parts.value.as_str();
+        match self {
+            Self::Button => matches!(value, "space" | "enter"),
+            Self::Select | Self::Date => {
+                parts.kind() == Kind::Character
+                    || matches!(
+                        value,
+                        "space"
+                            | "enter"
+                            | "arrow_up"
+                            | "arrow_down"
+                            | "home"
+                            | "end"
+                            | "page_up"
+                            | "page_down"
+                    )
+                    || (self == Self::Date
+                        && matches!(value, "backspace" | "delete" | "arrow_left" | "arrow_right"))
+            }
+            _ => false,
+        }
+    }
+
+    fn takes(self, key: &str, action: &str, own: bool) -> bool {
+        match action {
+            "default" => own,
+            "program" | "prefix" => own || !self.uses(key),
+            _ if self == Self::Selection => own && action == "copy",
+            _ => self.is_field() != is_scroll(action),
+        }
+    }
+}
+
 /// A set of bindings, key to action, read on a [`Platform`] (SDK.md
-/// §3.10, SPEC §10.2). [`parse_keymap`] reads one from a `data-keys`
-/// value, and [`resolve`] builds a text field's.
+/// §3.10, SPEC §10.2). [`parse_keymap`] reads an attribute value, and
+/// [`resolve`] builds the keymap for a [`Reader`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Keymap {
     /// Each key, canonical with `mod` read, in the order first bound, and
@@ -1074,23 +1140,21 @@ pub struct Keymap {
     bindings: Vec<(String, String)>,
     /// Each key's last binding as written, `mod` kept, by index.
     written: Vec<String>,
-    multiline: bool,
+    reader: Reader,
     modifier: Mod,
     base: Option<Box<Keymap>>,
 }
 
-/// Reads a `data-keys` value as SPEC §10.2 has hosts read it: bindings
+/// Reads a `data-keys` or `data-keys-inner` value (SPEC §10.2): bindings
 /// separated by ASCII white space, each `key=action`, split at its last
 /// `=`, each key read with [`read_key`]; dropping a key that does not
 /// parse, an action it does not know, `shift+tab`, `escape`, and `tab`
 /// except when bound to `program` or `default`, which a field honours.
 /// On `ctrl`, `mod+a` and `ctrl+a` are one key, the later binding's.
 ///
-/// An element that is not a text field has the keymap of its `data-keys`
-/// values joined with a space, the root's first, with no default keymap:
-/// what [`Keymap::program`], [`Keymap::prefix`] and [`Keymap::scroll`] ask.
+/// Use [`resolve`] to build the keymap a focused element or selection reads.
 pub fn parse_keymap(platform: &Platform, value: &str) -> Keymap {
-    let mut m = Keymap::new(platform.modifier, false);
+    let mut m = Keymap::new(platform.modifier, Reader::Element);
     for (k, a) in bindings(value) {
         m.bind(k, a);
     }
@@ -1153,47 +1217,64 @@ const SUPER_KEYS: &[(&str, &str)] = &[
     ("ctrl+k", "delete-to-line-end"),
 ];
 
-/// A text field's keymap (SDK.md §3.10): SPEC §10.2's default keymap for
-/// the platform's `mod`, with its edit shortcuts, for an `input` or for a
-/// multi-line field, then each `data-keys` value in turn, the root's first.
-/// A binding to a scroll action is left out where it stands, in its own
-/// value too: it neither acts nor overrides an earlier binding of its key.
-/// A binding to `default` gives the key back to this field's default keymap.
+/// Builds the keymap a reader reads (SDK.md §3.10, SPEC §10.2).
+/// A text field or selection starts from the platform's default keymap.
+/// Then come the ancestors' `data-keys-inner` values, from the root down,
+/// and finally the focused element's own `data-keys`. With nothing focused
+/// or for a selection, pass the body's own value and the root's and
+/// body's inner values. For an 0.8 session use `data-keys` for both
+/// scopes (HOST.md §5.1).
 pub fn resolve<'a>(
     platform: &Platform,
-    multiline: bool,
-    values: impl IntoIterator<Item = &'a str>,
+    reader: Reader,
+    own: &'a str,
+    inner: impl IntoIterator<Item = &'a str>,
 ) -> Keymap {
-    let mut m = Keymap::new(platform.modifier, multiline);
-    for (k, a) in DEFAULT_KEYS {
-        m.bind(k, a);
-    }
-    m.bind("enter", if multiline { "newline" } else { "submit" });
-    let own = match platform.modifier {
-        Mod::Ctrl => CTRL_KEYS,
-        Mod::Super => SUPER_KEYS,
-    };
-    for (k, a) in own {
-        m.bind(k, a);
-    }
-    for (a, keys) in platform.edit_shortcuts() {
-        for k in keys {
-            m.bind(&k, &a);
-        }
-    }
-    m.base = Some(Box::new(m.clone()));
-    for v in values {
-        for (k, a) in bindings(v).filter(|(_, a)| !is_scroll(a)) {
+    let mut m = Keymap::new(platform.modifier, reader);
+    if reader.is_field() || reader == Reader::Selection {
+        for (k, a) in DEFAULT_KEYS {
             m.bind(k, a);
+        }
+        m.bind(
+            "enter",
+            if reader == Reader::Multiline {
+                "newline"
+            } else {
+                "submit"
+            },
+        );
+        let platform_keys = match platform.modifier {
+            Mod::Ctrl => CTRL_KEYS,
+            Mod::Super => SUPER_KEYS,
+        };
+        for (k, a) in platform_keys {
+            m.bind(k, a);
+        }
+        for (a, keys) in platform.edit_shortcuts() {
+            if EDIT_ACTIONS.contains(&a.as_str()) {
+                for k in keys {
+                    m.bind(&k, &a);
+                }
+            }
+        }
+        m.base = Some(Box::new(m.clone()));
+    }
+    for (value, own) in inner.into_iter().map(|v| (v, false)).chain([(own, true)]) {
+        for (key, action) in bindings(value) {
+            if let Some(canonical) = read_key(platform, key)
+                && reader.takes(&canonical, action, own)
+            {
+                m.bind(key, action);
+            }
         }
     }
     m
 }
 
 impl Keymap {
-    fn new(modifier: Mod, multiline: bool) -> Keymap {
+    fn new(modifier: Mod, reader: Reader) -> Keymap {
         Keymap {
-            multiline,
+            reader,
             modifier,
             ..Keymap::default()
         }
@@ -1297,22 +1378,23 @@ impl Keymap {
     /// field's, and reaches the program, or moves focus. `tab`, `shift+tab`
     /// and `escape` are never the field's, nor a key bound to `program` or
     /// `prefix`, or to an action the field does not have (a multi-line one
-    /// in an input).
+    /// in an input). A selection's keymap answers only `copy`.
     pub fn lookup(&self, key: &str) -> Option<&str> {
         let k = parse_key(key)?;
         if matches!(k.as_str(), "tab" | "shift+tab" | "escape") {
             return None;
         }
-        match self.bound(&k) {
+        let action = match self.bound(&k) {
             Some("default") => self
                 .base
                 .as_ref()
                 .map_or_else(|| key_text(&k).map(|_| INSERT), |base| base.lookup(&k)),
             Some("program" | "prefix") => None,
-            Some(a) if is_multiline(a) && !self.multiline => None,
+            Some(a) if is_multiline(a) && self.reader != Reader::Multiline => None,
             Some(a) => Some(a),
             None => key_text(&k).map(|_| INSERT),
-        }
+        };
+        action.filter(|&a| self.reader != Reader::Selection || a == "copy")
     }
 
     /// Whether a field with this keymap selects with a key (SPEC §10.2,
@@ -1335,7 +1417,7 @@ impl Keymap {
     pub fn program(&self, key: &str) -> bool {
         parse_key(key).is_some_and(|k| {
             if k == "tab" {
-                self.base.is_some() && self.bound(&k) == Some("program")
+                self.reader.is_field() && self.bound(&k) == Some("program")
             } else {
                 matches!(self.bound(&k), Some("program" | "prefix"))
             }

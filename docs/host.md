@@ -99,8 +99,22 @@ what such a host needs beside what every SDK has: `KeyParts` to take a name
 apart and put it together, `char_key`, `Keymap::press` to pick the name a
 keymap binds, and `Platform::edit_press` for the edit shortcuts.
 
-`parse_keymap` keeps `tab=program` and `tab=default`, but `Keymap::program`
-gives Tab to the program only on a field's keymap, from `resolve` (SPEC
-§10.2). A binding to `default` restores the default field action or typing;
-outside a field it takes a farther binding back, so the host uses the key
-as with no keymap.
+Use `resolve(&platform, reader, own, inner)` to resolve a focused
+element's `data-keys` and the ancestors' `data-keys-inner` from the root
+down. Pick the reader for the control. With nothing focused, use
+`Reader::Element`, the body's own keymap and the root's and body's inner
+keymaps. Use those same attributes with `Reader::Selection` for selection
+copy. For 0.8, read `data-keys` for both scopes (HOST.md §5.1).
+
+`parse_keymap` reads either attribute and keeps `tab=program` and
+`tab=default`. `Keymap::program` gives Tab to the program on a field's
+resolved keymap when bound to `program` (SPEC §10.2). An own binding to
+`default` restores the reader's default behavior.
+
+## Relaying input
+
+Advertise the capabilities your relay carries in full. Over the window
+of a relayed surface on the alternate screen with mouse tracking off,
+drop wheels along an axis the surface's document scrolls. Otherwise
+pass the wheel on. The surface placement and the document's `scroll`
+value supply the information for the decision (SDK.md §4.5, SPEC §5.3).

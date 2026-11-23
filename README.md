@@ -123,9 +123,9 @@ A program that draws its fields in cells edits them with the keymap it gives
 its surfaces' fields, so a field edits the same on a host and off one:
 
 ```rust
-use hotty::{Field, INSERT, TERMINAL_KEYS, decode_keys, key_text, platform_of, resolve};
+use hotty::{Field, INSERT, Reader, TERMINAL_KEYS, decode_keys, key_text, platform_of, resolve};
 
-let keys = resolve(&platform_of(&caps), false, [TERMINAL_KEYS]);
+let keys = resolve(&platform_of(&caps), Reader::Input, "", [TERMINAL_KEYS]);
 let mut f = Field::default();
 for key in decode_keys(&read).into_iter().flatten() {
     match keys.lookup(&key) {

@@ -114,8 +114,11 @@ keyboard back with a blur, as the program above does on Escape:
 `session.send(hotty::blur(&card))`.
 
 A field edits the same in cells as on a host when the program gives both
-the same keymap: `hotty::TERMINAL_KEYS` in the surface's `data-keys`, and a
-`hotty::Field` with `hotty::resolve(…, TERMINAL_KEYS)` in the cells.
+the same keymap. Put `hotty::TERMINAL_KEYS` in `data-keys-inner` on an
+element that contains the fields. Use `data-keys` there in a negotiated
+0.8 session. Resolve the cells keymap with
+`hotty::resolve(&platform, hotty::Reader::Input, "", [hotty::TERMINAL_KEYS])`.
+Use `Reader::Multiline` for a multiline field (SDK.md §3.10, §4.6).
 
 ## The widget
 

@@ -3,9 +3,9 @@
 //! §4.6, the second rendition).
 //!
 //! ```
-//! use hotty::{Field, INSERT, Platform, TERMINAL_KEYS, resolve};
+//! use hotty::{Field, INSERT, Platform, Reader, TERMINAL_KEYS, resolve};
 //!
-//! let keys = resolve(&Platform::default(), false, [TERMINAL_KEYS]);
+//! let keys = resolve(&Platform::default(), Reader::Input, "", [TERMINAL_KEYS]);
 //! let mut f = Field::new("foo bar");
 //! let (action, changed) = f.key(&keys, "ctrl+w");
 //! assert_eq!((action, changed), (Some("delete-word-backward"), true));
