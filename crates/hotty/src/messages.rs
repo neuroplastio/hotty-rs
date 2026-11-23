@@ -101,7 +101,7 @@ impl Message {
             message: self.clone(),
             ..Event::default()
         };
-        if matches!(k, "click" | "change" | "input") {
+        if matches!(k, "click" | "auxclick" | "change" | "input") {
             e.value = str_of("value");
         }
         if k == "change" {
@@ -116,27 +116,35 @@ impl Message {
         if k == "submit" {
             e.fields = d.and_then(|d| body::fields(d.get("fields")?));
         }
-        if matches!(k, "click" | "press" | "dragstart" | "drag" | "dragend") {
+        if matches!(
+            k,
+            "click" | "press" | "contextmenu" | "auxclick" | "dragstart" | "drag" | "dragend"
+        ) {
             e.mods = int_of("mods")
                 .and_then(|m| u32::try_from(m).ok())
                 .unwrap_or(0);
         }
-        if k == "press" {
-            e.button = int_of("button")
-                .and_then(|b| u32::try_from(b).ok())
-                .unwrap_or(0);
+        if matches!(k, "press" | "auxclick" | "dragstart") {
+            e.button = int_of("button").and_then(|b| u32::try_from(b).ok());
+            if k == "dragstart" && e.button.is_none() {
+                e.button = Some(crate::BUTTON_PRIMARY);
+            }
+        }
+        if matches!(k, "press" | "contextmenu" | "auxclick") {
             e.c = int_of("c");
             e.r = int_of("r");
         }
-        if matches!(k, "click" | "press") {
+        if matches!(k, "click" | "press" | "contextmenu" | "auxclick") {
             e.area = d.and_then(|d| body::area(d.get("area")?));
+        }
+        if matches!(k, "click" | "auxclick") {
+            e.link = str_of("href").map(|href| Link {
+                href,
+                url: str_of("url"),
+            });
         }
         match k {
             "click" => {
-                e.link = str_of("href").map(|href| Link {
-                    href,
-                    url: str_of("url"),
-                });
                 e.count = Some(
                     int_of("count")
                         .filter(|&n| n > 1)
@@ -324,7 +332,7 @@ pub struct Event {
     pub kind: String,
     /// The id of the element that reported (`t`); empty when absent.
     pub target: String,
-    /// `value`: a `click`'s, `change`'s or `input`'s.
+    /// `value`: a `click`'s, `auxclick`'s, `change`'s or `input`'s.
     pub value: Option<String>,
     /// `checked`: a `change`'s of a checkbox or radio button.
     pub checked: Option<bool>,
@@ -339,7 +347,7 @@ pub struct Event {
     pub fields: Option<Vec<(String, String)>>,
     /// `mods`: the modifier bits ([`MOD_SHIFT`](crate::MOD_SHIFT), …), 0 when absent.
     pub mods: u32,
-    /// `href` and `url`: a `click` on a link.
+    /// `href` and `url`: a `click` or `auxclick` on a link.
     pub link: Option<Link>,
     /// `r`: a `fit`'s rows.
     pub fit_rows: Option<u32>,
@@ -347,17 +355,17 @@ pub struct Event {
     pub drag: Option<Drag>,
     /// Where a `hover` says the pointer is.
     pub hover: Option<Hover>,
-    /// `area`: the cells of the element a `click` or `press` reported.
+    /// `area`: the element's cells on a `click`, `press`, `contextmenu` or
+    /// `auxclick` (SPEC §9).
     pub area: Option<Area>,
-    /// `button`: the DOM's number for a `press`'s button (SPEC §9), 2 for a
-    /// secondary press; 0 when absent, the primary button's. A handler of
-    /// `press` that means the primary button checks it.
-    pub button: u32,
-    /// `c`: the pointer's column on a secondary press (SPEC §9), from 0 at
-    /// the surface's left; `None` when the detail has none. May be negative.
+    /// `button`: the DOM's button number on an `auxclick`, `dragstart` or
+    /// 0.8 secondary `press` (SPEC §9, HOST.md §5.2). A `dragstart` whose
+    /// detail has none uses [`BUTTON_PRIMARY`](crate::BUTTON_PRIMARY).
+    pub button: Option<u32>,
+    /// `c`: the pointer's column on a `contextmenu`, `auxclick` or 0.8
+    /// secondary `press`, from 0 at the surface's left. May be negative.
     pub c: Option<i64>,
-    /// `r`: the pointer's row on a secondary press (SPEC §9); `None` when
-    /// the detail has none. May be negative.
+    /// `r`: the pointer's row on the same events as [`Event::c`].
     pub r: Option<i64>,
     /// `count`: a `click`'s place in its run of clicks (SPEC §9), 2 for the
     /// second click of a double click; 1 for a click whose detail has none;
@@ -656,12 +664,33 @@ mod body {
                 ("c", Int),
                 ("r", Int),
             ]),
+            "contextmenu" => &Map(&[("area", AREA), ("mods", Int), ("c", Int), ("r", Int)]),
+            "auxclick" => &Map(&[
+                ("value", Str),
+                ("href", Str),
+                ("url", Str),
+                ("area", AREA),
+                ("mods", Int),
+                ("button", Int),
+                ("c", Int),
+                ("r", Int),
+            ]),
             "change" => &Map(&[("checked", Bool), ("value", Str), ("rev", Int)]),
             "input" => &Map(&[("value", Str), ("rev", Int), ("sel", Array(&Int))]),
             "caret" => &Map(&[("sel", Array(&Int)), ("rev", Int)]),
             "submit" => &Map(&[("fields", Array(&STRS))]),
             "fit" => &Map(&[("r", Int)]),
-            "dragstart" | "drag" | "dragend" => &DRAG,
+            "dragstart" => &Map(&[
+                ("c", Int),
+                ("r", Int),
+                ("mods", Int),
+                ("x", Int),
+                ("y", Int),
+                ("tx", Int),
+                ("ty", Int),
+                ("button", Int),
+            ]),
+            "drag" | "dragend" => &DRAG,
             "hover" => &Map(&[("c", Int), ("r", Int), ("out", Bool)]),
             "view" => &Map(&[("in", Each(&AREA)), ("end", Bool)]),
             "command" => &Map(&[("name", Str), ("key", Str), ("text", Str)]),

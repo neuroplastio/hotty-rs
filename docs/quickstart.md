@@ -128,6 +128,21 @@ while let Some(input) = t.next_input(None) {
 t.detach_all()?; // what stays on the screen reports to nobody now
 ```
 
+## Context menus
+
+Put `contextmenu` in the element's `data-on`. Include `secondary` if the
+document also runs in a 0.8 session. Open the same menu from
+`kind::CONTEXT_MENU` or from `kind::PRESS` with
+`event.button == Some(hotty::BUTTON_SECONDARY)`. If the element opts into
+`rightbutton`, the physical secondary button arrives as `kind::AUX_CLICK`
+with that same button number in 0.9.
+
+Anchor the menu at the event's pointer cell when supplied. For the menu
+key or Shift+F10 use the focused element's area. A host can report either
+key as a `contextmenu` with no pointer cell. Place the menu surface at a
+higher `z`, give it focus, and close it on a pick, blur, Escape, scroll or
+resize (SDK.md §4.7).
+
 ## Next
 
 - [hotty in a ratatui program](ratatui.md): surfaces as widgets in a

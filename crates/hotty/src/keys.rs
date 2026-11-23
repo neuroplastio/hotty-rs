@@ -800,6 +800,10 @@ fn final_key(f: u8) -> Option<&'static str> {
         b'D' => "arrow_left",
         b'H' => "home",
         b'F' => "end",
+        b'P' => "f1",
+        b'Q' => "f2",
+        b'R' => "f3",
+        b'S' => "f4",
         _ => return None,
     })
 }
@@ -834,6 +838,7 @@ fn code_key(code: u32, mods: u8, shifted: u32, text: &str) -> Option<String> {
         27 => "escape",
         8 | 127 => "backspace",
         32 => "space",
+        57363 => "context_menu",
         57399..=57408 => {
             return Some(join(
                 mods,
@@ -924,6 +929,19 @@ fn csi_key(params: &str, fin: u8) -> Option<String> {
                 3 => "delete",
                 5 => "page_up",
                 6 => "page_down",
+                11 => "f1",
+                12 => "f2",
+                13 => "f3",
+                14 => "f4",
+                15 => "f5",
+                17 => "f6",
+                18 => "f7",
+                19 => "f8",
+                20 => "f9",
+                21 => "f10",
+                23 => "f11",
+                24 => "f12",
+                29 => "context_menu",
                 _ => return None,
             };
             let (mods, release) = mods_of(field(1))?;

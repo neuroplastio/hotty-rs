@@ -255,43 +255,49 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
             .and_then(move |v| some(k, move |w: &mut Writer| w.str(&v)))
     };
     let int_field = |k: &'static str, v: Option<i64>| v.and_then(|v| some(k, move |w| int(w, v)));
+    let button = e.button.map(i64::from);
+    let area_field = || e.area.and_then(|a| some("area", move |w| area(w, &a)));
     match e.kind.as_str() {
-        kind::CLICK => {
-            let f = vec![
-                e.area.and_then(|a| some("area", move |w| area(w, &a))),
+        kind::CLICK | kind::AUX_CLICK => {
+            let mut f = vec![
+                area_field(),
                 int_field("mods", mods),
                 e.link
                     .as_ref()
-                    .and_then(|l| str_field("href", &Some(l.href.clone()))),
+                    .map(|l| l.href.as_str())
+                    .and_then(|href| some("href", move |w| w.str(href))),
                 e.link.as_ref().and_then(|l| str_field("url", &l.url)),
                 str_field("value", &e.value),
-                int_field("count", e.count.filter(|&n| n > 1).map(i64::from)),
             ];
+            if e.kind == kind::CLICK {
+                f.push(int_field(
+                    "count",
+                    e.count.filter(|&n| n > 1).map(i64::from),
+                ));
+            } else {
+                f.extend([
+                    int_field("button", button),
+                    int_field("c", e.c),
+                    int_field("r", e.r),
+                ]);
+            }
             if f.iter().all(Option::is_none) {
                 return None;
             }
             fields(&mut w, f);
         }
-        kind::PRESS => {
-            let button = (e.button != 0).then_some(i64::from(e.button));
-            if e.area.is_none()
-                && mods.is_none()
-                && button.is_none()
-                && e.c.is_none()
-                && e.r.is_none()
-            {
+        kind::PRESS | kind::CONTEXT_MENU => {
+            let f = vec![
+                area_field(),
+                int_field("mods", mods),
+                int_field("button", button.filter(|_| e.kind == kind::PRESS)),
+                int_field("c", e.c),
+                int_field("r", e.r),
+            ];
+            if f.iter().all(Option::is_none) {
                 return None;
             }
-            fields(
-                &mut w,
-                vec![
-                    e.area.and_then(|a| some("area", move |w| area(w, &a))),
-                    int_field("mods", mods),
-                    int_field("button", button),
-                    int_field("c", e.c),
-                    int_field("r", e.r),
-                ],
-            );
+            fields(&mut w, f);
         }
         kind::CHANGE => fields(
             &mut w,
@@ -344,6 +350,10 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
                     int_field("y", d.y),
                     int_field("tx", d.tx),
                     int_field("ty", d.ty),
+                    int_field(
+                        "button",
+                        button.filter(|&b| e.kind == kind::DRAG_START && b != 0),
+                    ),
                 ],
             );
         }

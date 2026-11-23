@@ -642,11 +642,38 @@ fn events_read_back() {
         },
         Event {
             area,
-            button: 2,
+            button: Some(hotty::BUTTON_SECONDARY),
             c: Some(5),
             r: Some(-1),
             mods: MOD_SHIFT,
             ..ev("press", Some("s"), "row")
+        },
+        Event {
+            area,
+            mods: MOD_SHIFT,
+            ..ev(hotty::kind::CONTEXT_MENU, Some("s"), "row")
+        },
+        Event {
+            area,
+            button: Some(hotty::BUTTON_SECONDARY),
+            c: Some(5),
+            r: Some(1),
+            mods: MOD_ALT,
+            value: Some("open".into()),
+            link: Some(Link {
+                href: "#a".into(),
+                url: Some("https://x/#a".into()),
+            }),
+            ..ev(hotty::kind::AUX_CLICK, Some("s"), "row")
+        },
+        Event {
+            button: Some(hotty::BUTTON_MIDDLE),
+            drag: Some(Drag {
+                c: 5,
+                r: 1,
+                ..Drag::default()
+            }),
+            ..ev(hotty::kind::DRAG_START, Some("s"), "row")
         },
         Event {
             checked: Some(true),
@@ -751,7 +778,7 @@ fn a_primary_press_is_written_with_no_button_c_or_r() {
         ..ev("press", Some("s"), "row")
     });
     let e = event_of(s);
-    assert_eq!((e.button, e.c, e.r), (0, None, None));
+    assert_eq!((e.button, e.c, e.r), (None, None, None));
     // A map of the area alone: one entry, and no key `button`.
     assert_eq!(e.message.payload[0], 0x81);
     assert!(!e.message.payload.windows(6).any(|w| w == b"button"));

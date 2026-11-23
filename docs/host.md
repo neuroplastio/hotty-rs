@@ -82,11 +82,12 @@ split.feed(&program_output, &mut |o| match o {
 - **`reply_hit`** answers a hit query with a `hotty::HitCell`: the target
   `t`, empty for none, and the steps `tx` and `ty` where it has them (SPEC
   §9.7). **`hit_body`** writes that body alone, omitting absent fields.
-- **`encode_event`**: an event, its detail written from what the
-  `hotty::Event` carries for its kind, each field of the type SPEC §3.3
-  gives it; a `press` writes `button` only when it is not 0 (a secondary
-  press is 2, with `c` and `r`, SPEC §9). A relay that renames an event's surface passes its detail on
-  as it came.
+- **`encode_event`** writes the detail for the event kind (SPEC §3.3,
+  §9). In a 0.9 session, send a primary `press`, a `contextmenu`, or an
+  `auxclick` as the gesture calls for. Put the button on a non-primary
+  `dragstart`. In a 0.8 session, send the menu gesture as a `press` with
+  `BUTTON_SECONDARY` and its cell (HOST.md §5.2). A relay that renames an
+  event's surface passes its detail on as it came.
 
 Nothing written is compressed: a host never compresses (SPEC §3.3).
 

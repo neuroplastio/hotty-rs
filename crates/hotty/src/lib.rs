@@ -123,6 +123,17 @@ pub const MOD_CTRL: u32 = 4;
 /// Super was held.
 pub const MOD_SUPER: u32 = 8;
 
+/// The primary pointer button (SPEC §9).
+pub const BUTTON_PRIMARY: u32 = 0;
+/// The middle pointer button (SPEC §9).
+pub const BUTTON_MIDDLE: u32 = 1;
+/// The secondary pointer button (SPEC §9).
+pub const BUTTON_SECONDARY: u32 = 2;
+/// The back pointer button (SPEC §9).
+pub const BUTTON_BACK: u32 = 3;
+/// The forward pointer button (SPEC §9).
+pub const BUTTON_FORWARD: u32 = 4;
+
 /// The event kinds (SPEC §9). An event of a kind not listed is an event all
 /// the same, its kind as it came (SDK.md §2.7).
 pub mod kind {
@@ -137,11 +148,14 @@ pub mod kind {
     pub const CARET: &str = "caret";
     /// A form was submitted; the detail is its fields.
     pub const SUBMIT: &str = "submit";
-    /// A press anywhere in a placement made with `press`, or a secondary
-    /// press on an element with `secondary` in its `data-on` (SPEC §9). A
-    /// handler that means the primary button checks [`Event::button`](crate::Event::button):
-    /// a secondary press has 2, with the pointer's cell in `c` and `r`.
+    /// The primary button pressed in a placement made with `press` (SPEC §9).
+    /// In 0.8, also the secondary gesture on an element with `data-on~=secondary`.
     pub const PRESS: &str = "press";
+    /// The context-menu gesture on an element with `data-on~=contextmenu`.
+    pub const CONTEXT_MENU: &str = "contextmenu";
+    /// Another button was pressed and released on an element that takes it
+    /// with `aux` or `rightbutton` in its `data-on` (SPEC §9).
+    pub const AUX_CLICK: &str = "auxclick";
     /// The user focused an element; the target names it (SPEC §10.1).
     pub const FOCUS: &str = "focus";
     /// The surface gave the keyboard back.
@@ -152,7 +166,7 @@ pub mod kind {
     pub const HOVER: &str = "hover";
     /// Which elements with `data-on~=view` are in view changed (SPEC §9.5).
     pub const VIEW: &str = "view";
-    /// The primary button pressed on a draggable element (SPEC §9.1).
+    /// A button pressed on a draggable element (SPEC §9.1).
     pub const DRAG_START: &str = "dragstart";
     /// The element under the pointer changed during a drag.
     pub const DRAG: &str = "drag";
@@ -164,9 +178,25 @@ pub mod kind {
     /// A capability changed (SPEC §4). It belongs to no surface.
     pub const CAPS: &str = "caps";
     /// Every kind this SDK knows, in SPEC §9's order.
-    pub const ALL: [&str; 16] = [
-        CLICK, CHANGE, INPUT, CARET, SUBMIT, PRESS, FOCUS, BLUR, FIT, HOVER, VIEW, DRAG_START,
-        DRAG, DRAG_END, COMMAND, CAPS,
+    pub const ALL: [&str; 18] = [
+        CLICK,
+        CHANGE,
+        INPUT,
+        CARET,
+        SUBMIT,
+        PRESS,
+        CONTEXT_MENU,
+        AUX_CLICK,
+        FOCUS,
+        BLUR,
+        FIT,
+        HOVER,
+        VIEW,
+        DRAG_START,
+        DRAG,
+        DRAG_END,
+        COMMAND,
+        CAPS,
     ];
 }
 

@@ -625,7 +625,8 @@ fn tilde_key(p: &Params) -> Option<Event> {
         11..=15 => KeyCode::F((n - 10) as u8),
         17..=21 => KeyCode::F((n - 11) as u8),
         23..=26 => KeyCode::F((n - 12) as u8),
-        28 | 29 => KeyCode::F((n - 13) as u8),
+        28 => KeyCode::F(15),
+        29 => KeyCode::Menu,
         31..=34 => KeyCode::F((n - 14) as u8),
         _ => return None,
     };
@@ -963,7 +964,7 @@ mod tests {
                     k(F(13), NONE),
                     k(F(14), NONE),
                     k(F(15), NONE),
-                    k(F(16), NONE),
+                    k(Menu, NONE),
                 ],
             ),
             (b"\x1b[31~\x1b[34~", vec![k(F(17), NONE), k(F(20), NONE)]),
@@ -1018,8 +1019,8 @@ mod tests {
                 vec![k(F(13), NONE), k(F(35), NONE)],
             ),
             (
-                b"\x1b[57358u\x1b[57363u",
-                vec![k(CapsLock, NONE), k(Menu, NONE)],
+                b"\x1b[57358u\x1b[57363u\x1b[21;2~",
+                vec![k(CapsLock, NONE), k(Menu, NONE), k(F(10), SHIFT)],
             ),
             (
                 b"\x1b[97;65u",
