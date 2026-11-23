@@ -487,7 +487,7 @@ pub struct CellCss {
 /// ([`Event::changed`]). Each field is `None` when the host did not send it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Caps {
-    /// The protocol version the host answers in: `"0.8"` or `"0.7"`, one of [`VERSIONS`](crate::VERSIONS), which the host speaks from then on.
+    /// The protocol version the host answers in: `"0.9"` or `"0.8"`, one of [`VERSIONS`](crate::VERSIONS), which the host speaks from then on.
     pub v: Option<String>,
     /// A cell's size in CSS pixels (`cellcss`).
     pub cell_css: Option<CellCss>,
@@ -517,7 +517,7 @@ pub struct Caps {
 
 impl Caps {
     /// Whether the host has an optional feature (SPEC §4): `passthrough`,
-    /// `hover`, `count`, `menu` or `backdrop`. Everything else a 0.8 host
+    /// `hover`, `count`, `menu` or `backdrop`. Everything else a 0.9 host
     /// does.
     pub fn has(&self, feature: &str) -> bool {
         self.features

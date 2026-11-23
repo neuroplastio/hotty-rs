@@ -7,14 +7,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use hotty::{Control, Decoder, Fed, Scanner, Segment, encode_plain};
+use hotty::{Area, BUTTON_SECONDARY, Control, Decoder, Fed, Scanner, Segment, encode_plain, kind};
 use hotty_ratatui::{Backend, Event, Mode, Session, Surface};
 use ratatui::Terminal;
 use ratatui::crossterm::event::{Event as Input, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::widgets::Paragraph;
 
-const CAPS_07: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'7'];
+const CAPS_08: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'8'];
+const CAPS_09: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'9'];
 
 struct Host {
     commands: Arc<Mutex<Vec<Control>>>,
@@ -24,6 +25,10 @@ struct Host {
 
 impl Host {
     fn start(native: bool) -> (Host, Session) {
+        Self::start_with_caps(native.then_some(CAPS_08))
+    }
+
+    fn start_with_caps(caps: Option<&'static [u8]>) -> (Host, Session) {
         let (from_host, to_program) = std::io::pipe().unwrap();
         let (mut from_program, to_host) = std::io::pipe().unwrap();
         let term = hotty::Terminal::builder("app")
@@ -59,12 +64,12 @@ impl Host {
                             }
                             a
                         }
-                        Segment::Osc(s) if native => match dec.feed(&s) {
+                        Segment::Osc(s) if caps.is_some() => match dec.feed(&s) {
                             Fed::Complete(m) => {
                                 cmds.lock().unwrap().push(m.control.clone());
                                 if m.action() == "q" {
                                     let c = Control::from([("a", "ok"), ("n", "1"), ("re", "q")]);
-                                    encode_plain(&c, CAPS_07).into_bytes()
+                                    encode_plain(&c, caps.unwrap()).into_bytes()
                                 } else {
                                     Vec::new()
                                 }
@@ -177,6 +182,55 @@ fn keys_come_back_as_crosstermss_events_and_clicks_as_hottys() {
     };
     assert_eq!((e.kind.as_str(), e.target.as_str()), ("click", "ok"));
     assert!(!session.poll(Duration::from_millis(30)).unwrap());
+}
+
+#[test]
+fn menu_events_reach_the_program_in_both_versions() {
+    let area = Area {
+        c: 2,
+        r: 3,
+        w: 8,
+        h: 1,
+    };
+    for (caps, event_kind, button, c, r) in [
+        (
+            CAPS_08,
+            kind::PRESS,
+            Some(BUTTON_SECONDARY),
+            Some(4),
+            Some(3),
+        ),
+        (CAPS_09, kind::CONTEXT_MENU, None, None, None),
+        (
+            CAPS_09,
+            kind::AUX_CLICK,
+            Some(BUTTON_SECONDARY),
+            Some(4),
+            Some(3),
+        ),
+    ] {
+        let (host, session) = Host::start_with_caps(Some(caps));
+        assert_eq!(session.read().unwrap(), Event::Ready(Mode::Native));
+        let wire = hotty::host::encode_event(&hotty::Event {
+            kind: event_kind.into(),
+            surface: Some("app-card".into()),
+            target: "row".into(),
+            area: Some(area),
+            button,
+            c,
+            r,
+            ..hotty::Event::default()
+        });
+        host.send(wire.as_bytes());
+
+        let Event::Hotty(event) = session.read().unwrap() else {
+            panic!("expected a hotty event");
+        };
+        assert_eq!(event.kind, event_kind);
+        assert_eq!(event.target, "row");
+        assert_eq!(event.area, Some(area));
+        assert_eq!((event.button, event.c, event.r), (button, c, r));
+    }
 }
 
 #[test]

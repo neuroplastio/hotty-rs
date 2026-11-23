@@ -7,21 +7,22 @@ them. It follows the hotty repository's SDK.md: the same two layers, names
 and defaults as the other SDKs, and every SDK section of the conformance
 vectors.
 
-It speaks hotty 0.8, and 0.7 too (`hotty::VERSIONS`, SPEC §15): a host's
+It speaks hotty 0.9, and 0.8 too (`hotty::VERSIONS`, SPEC §15): a host's
 replies and events carry msgpack bodies (SPEC §3.3), its query lists the
-versions it speaks (`a=q:n=1:v=0.7,0.8`, SPEC §4), and keys are named as myelin
+versions it speaks (`a=q:n=1:v=0.8,0.9`, SPEC §4), and keys are named as myelin
 key names 0.1 names them (SPEC §10.4). A host that answers in either is a host
-to it, and the capabilities' `v` (`Caps::v`) says which one the program met: a
-0.7 host has no `scroll` op or `hit` query and ignores `tab=program` and
-`default` in keymaps (SDK.md §3.8). A terminal of another hotty version is no host to it, and
-the program draws in cells.
+to it. Use the capabilities' `v` (`Caps::v`) to choose document markup for
+the session. Put inherited bindings in `data-keys-inner` for 0.9 and
+`data-keys` for 0.8. Subscribe to `contextmenu` for the menu gesture in
+0.9 or `secondary` in 0.8. The SDK uses the cells fallback with hosts of
+other versions (SDK.md §3.8).
 
 | crate | what it is | SDK.md |
 | --- | --- | --- |
 | `hotty` | the wire layer: builders, `encode`, `Decoder`, `Scanner`, `Detector`, replies, events and capabilities, keys and keymaps; a `Field` edited as a host edits one; `Link`, `Session` and `Terminal`; and `host`, what a host or a relay reads and writes | §3, §4.1, §4.3, §4.6 |
 | `hotty-ratatui` | hotty for a [ratatui](https://ratatui.rs) program: a `Surface` widget, a session that reads the terminal and hands back crossterm's events, a backend | §4.3 |
 
-0.8.x speaks hotty 0.8 and 0.7; the patch number is this repository's own.
+0.9.x speaks hotty 0.9 and 0.8; the patch number is this repository's own.
 
 ## Install
 
@@ -207,6 +208,13 @@ is a keyword or clashes:
   `command` event's detail; options are its builder methods: `.n(4)`,
   `.q(Quiet::NoReply)`, `doc(…).detached().scroll(SCROLL_VERTICAL)`,
   `query(1).late()`.
+
+## SDK coverage
+
+The tests drive the SDK against scripted hosts over pipes. For tests
+that need a document, focus fixup or pointer routing, use a host such as
+hotty-blitz. The `host` module supplies the wire layer for a relay
+(SDK.md §4.5). The application owns surface placement and input routing.
 
 ## Dependencies
 

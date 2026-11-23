@@ -66,7 +66,7 @@ split.feed(&program_output, &mut |o| match o {
   treats `hit` as a query, implying level 0 with or without `n`.
 - **`quiet_of`** says how much of a reply a command asks for, and
   **`answer_in`** the version a query is answered in, the highest of
-  `hotty::VERSIONS` (0.8 and 0.7) it lists, or `None`; **`speaks`** whether
+  `hotty::VERSIONS` (0.9 and 0.8) it lists, or `None`; **`speaks`** whether
   it lists one.
 
 ## Writing back
@@ -75,9 +75,9 @@ split.feed(&program_output, &mut |o| match o {
   `s` and names its action, with the keys a reply adds (a placement's `c`
   and `r`) or the error's code and detail.
 - **`reply_query`**: the capabilities to a query that lists a version of
-  `VERSIONS`, with `v` set to `answer_in`'s (a host that speaks 0.7 too keeps
-  that session as 0.7 has it, HOST.md §5), and `EVERSION` to one that
-  doesn't, its detail `0.7,0.8`. **`caps_body`** is the capabilities
+  `VERSIONS`, with `v` set to `answer_in`'s (a host that speaks 0.8 too keeps
+  that session as 0.8 has it, HOST.md §5), and `EVERSION` to one that
+  doesn't, its detail `0.8,0.9`. **`caps_body`** is the capabilities
   alone.
 - **`reply_hit`** answers a hit query with a `hotty::HitCell`: the target
   `t`, empty for none, and the steps `tx` and `ty` where it has them (SPEC

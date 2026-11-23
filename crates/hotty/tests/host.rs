@@ -508,7 +508,7 @@ fn the_quiet_level_is_the_wires() {
     assert_eq!(q(&[("a", "doc"), ("n", "3"), ("q", "2")]), Quiet::NoReply);
     assert_eq!(q(&[("a", "doc"), ("q", "7")]), Quiet::ReplyOnError);
     assert!(speaks(&command(query(1))));
-    assert!(speaks(&msg(&[("a", "q"), ("v", "0.5,0.7")], b"")));
+    assert!(speaks(&msg(&[("a", "q"), ("v", "0.5,0.8")], b"")));
     assert!(!speaks(&msg(&[("a", "q"), ("v", "0.5")], b"")));
 }
 
@@ -586,12 +586,12 @@ fn the_capabilities_read_back() {
     assert_eq!(r.caps, Some(want), "an int is held within 2^53 - 1");
     assert_eq!(r.n, Some(1));
 
-    assert_eq!(r.caps.as_ref().and_then(|c| c.v.as_deref()), Some("0.8"));
+    assert_eq!(r.caps.as_ref().and_then(|c| c.v.as_deref()), Some("0.9"));
     let old = msg(&[("a", "q"), ("n", "1"), ("v", "0.3")], b"");
     let r = reply_of(reply_query(&old, &caps));
     assert_eq!(
         (r.ok, r.code.as_deref(), r.detail.as_deref()),
-        (false, Some("EVERSION"), Some("0.7,0.8"))
+        (false, Some("EVERSION"), Some("0.8,0.9"))
     );
     assert_eq!(
         hotty::host::caps_body(&Caps::default()),
@@ -1164,10 +1164,10 @@ fn the_chunks_after_one_too_large_to_hold_are_dropped_too() {
 
 #[test]
 fn the_query_lists_both_versions() {
-    assert_eq!(VERSION, "0.8");
-    assert_eq!(VERSIONS, ["0.7", "0.8"]);
+    assert_eq!(VERSION, "0.9");
+    assert_eq!(VERSIONS, ["0.8", "0.9"]);
     let q = command(query(1));
-    assert_eq!(q.get("v"), Some("0.7,0.8"));
+    assert_eq!(q.get("v"), Some("0.8,0.9"));
 }
 
 fn version_of(r: &Reply) -> Option<&str> {
@@ -1177,12 +1177,13 @@ fn version_of(r: &Reply) -> Option<&str> {
 #[test]
 fn a_host_answers_a_query_in_the_highest_version_it_shares() {
     for (listed, want) in [
-        ("0.7,0.8", Some("0.8")),
-        ("0.8,0.7", Some("0.8")),
-        ("0.7", Some("0.7")),
+        ("0.8,0.9", Some("0.9")),
+        ("0.9,0.8", Some("0.9")),
         ("0.8", Some("0.8")),
-        ("0.5,0.7,99.0", Some("0.7")),
+        ("0.9", Some("0.9")),
+        ("0.5,0.8,99.0", Some("0.8")),
         ("0.5", None),
+        ("0.7", None),
         ("0.70", None),
         ("", None),
     ] {
@@ -1194,7 +1195,7 @@ fn a_host_answers_a_query_in_the_highest_version_it_shares() {
             Some(v) => assert_eq!((r.ok, version_of(&r)), (true, Some(v)), "v={listed}"),
             None => assert_eq!(
                 (r.ok, r.code.as_deref(), r.detail.as_deref()),
-                (false, Some("EVERSION"), Some("0.7,0.8")),
+                (false, Some("EVERSION"), Some("0.8,0.9")),
                 "v={listed}"
             ),
         }
@@ -1206,9 +1207,10 @@ fn a_host_answers_a_query_in_the_highest_version_it_shares() {
 #[test]
 fn the_detector_takes_either_version_and_refuses_others() {
     for (v, native) in [
-        ("0.7", true),
         ("0.8", true),
+        ("0.9", true),
         ("99.0", false),
+        ("0.7", false),
         ("0.6", false),
         ("0.5", false),
     ] {

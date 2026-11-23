@@ -9,8 +9,8 @@ use std::time::Duration;
 use hotty::link::Input;
 use hotty::{Control, Decoder, Fed, Placement, Scanner, Segment, Terminal, encode_plain};
 
-// {"v": "0.7"}, as a host writes it.
-const CAPS_07: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'7'];
+// {"v": "0.8"}, as a host writes it.
+const CAPS_08: &[u8] = &[0x81, 0xa1, b'v', 0xa3, b'0', b'.', b'8'];
 
 /// A host that answers the query, numbered commands, DA1 and CPR, and
 /// records every command it took.
@@ -101,9 +101,9 @@ fn serve(
 fn reply_to(c: &Control) -> Vec<u8> {
     let a = c.action();
     if a == "q" {
-        if c.get("v") == Some("0.7,0.8") {
+        if c.get("v") == Some("0.8,0.9") {
             let ctl = Control::from([("a", "ok"), ("n", c.get("n").unwrap()), ("re", "q")]);
-            return encode_plain(&ctl, CAPS_07).into_bytes();
+            return encode_plain(&ctl, CAPS_08).into_bytes();
         }
         return Vec::new();
     }
@@ -131,7 +131,7 @@ fn a_host_is_detected_and_answers_requests() {
     assert!(t.detect());
     assert_eq!(
         t.caps().and_then(|c| c.v),
-        Some("0.7".to_string()),
+        Some("0.8".to_string()),
         "the host's capabilities"
     );
     let name = t.surface("card");
