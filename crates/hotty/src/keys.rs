@@ -1121,6 +1121,9 @@ impl Reader {
     }
 
     fn takes(self, key: &str, action: &str, own: bool) -> bool {
+        if key == "tab" && !self.is_field() {
+            return false;
+        }
         match action {
             "default" => own,
             "program" | "prefix" => own || !self.uses(key),
@@ -1442,6 +1445,40 @@ impl Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_text_readers_resolve_tab_bindings() {
+        let p = Platform::default();
+        let names = ["tab".into(), "f1".into()];
+        for reader in [
+            Reader::Button,
+            Reader::Select,
+            Reader::Date,
+            Reader::Element,
+            Reader::Selection,
+        ] {
+            for (own, inner) in [
+                ("tab=program f1=prefix", ""),
+                ("f1=prefix", "tab=program"),
+                ("tab=default f1=prefix", "tab=program"),
+            ] {
+                let map = resolve(&p, reader, own, [inner]);
+                assert!(!map.binds("tab"), "{reader:?}: {map:?}");
+                assert!(!map.program("tab"));
+                assert_eq!(map.press(&names), Some("f1"));
+            }
+        }
+        for reader in [Reader::Input, Reader::Multiline] {
+            let map = resolve(&p, reader, "", ["tab=program"]);
+            assert!(map.binds("tab") && map.program("tab"));
+            assert_eq!(map.press(&names), Some("tab"));
+            let map = resolve(&p, reader, "tab=default", ["tab=program"]);
+            assert!(map.binds("tab") && !map.program("tab"));
+        }
+        for binding in ["tab=program", "tab=default"] {
+            assert_eq!(parse_keymap(&p, binding).format(), binding);
+        }
+    }
 
     #[test]
     fn a_platform_reads_mod_as_its_own() {

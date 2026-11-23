@@ -145,14 +145,6 @@ fn result_name(f: &Fed) -> &'static str {
     }
 }
 
-fn compressed(v: &Value) -> bool {
-    v["seqs"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|s| s.as_str().unwrap().contains("o=z"))
-}
-
 fn run(v: &Value) {
     let mut d = Decoder::new();
     if let Some(max) = v["max"].as_u64() {
@@ -166,6 +158,13 @@ fn run(v: &Value) {
         if let Fed::Complete(m) = f {
             messages.push(m);
         }
+    }
+    // Without zlib, both payloads are rejected before the inflated size can be checked.
+    if !cfg!(feature = "zlib") && common::name(v).starts_with("zlib that inflates past max ") {
+        assert_eq!(results, [json!("invalid"), json!("invalid")], "results");
+        assert_eq!(d.invalid(), 2, "invalid");
+        assert!(messages.is_empty(), "messages");
+        return;
     }
     assert_eq!(Value::Array(results), v["results"], "results");
     assert_eq!(
@@ -224,9 +223,5 @@ fn run(v: &Value) {
 
 #[test]
 fn decode() {
-    let cases: Vec<_> = common::section("decode")
-        .into_iter()
-        .filter(|v| cfg!(feature = "zlib") || !compressed(v))
-        .collect();
-    common::run_all("decode", &cases, run);
+    common::run_all("decode", &common::section("decode"), run);
 }

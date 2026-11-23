@@ -40,7 +40,15 @@ fn run(v: &Value) {
             got.push(m);
         }
     }
-    let want = v["commands"].as_array().unwrap();
+    // SDK.md §3.6 allows a decoder built without zlib to reject compressed bodies.
+    let (want, invalid) = if !cfg!(feature = "zlib") && common::name(v) == "o=z payloads are zlib" {
+        (&[][..], 1)
+    } else {
+        (
+            v["commands"].as_array().unwrap().as_slice(),
+            v["invalid"].as_u64().unwrap(),
+        )
+    };
     assert_eq!(got.len(), want.len(), "commands");
     for (m, w) in got.iter().zip(want) {
         assert!(
@@ -54,18 +62,10 @@ fn run(v: &Value) {
         let text = std::str::from_utf8(&m.payload).expect("the payload is UTF-8");
         assert_eq!(text, w["payload"].as_str().unwrap_or(""), "payload");
     }
-    assert_eq!(
-        d.invalid() as u64,
-        v["invalid"].as_u64().unwrap(),
-        "invalid"
-    );
+    assert_eq!(d.invalid() as u64, invalid, "invalid");
 }
 
 #[test]
 fn wire() {
-    let cases: Vec<_> = common::section("wire")
-        .into_iter()
-        .filter(|v| cfg!(feature = "zlib") || !v["stream"].as_str().unwrap().contains("o=z"))
-        .collect();
-    common::run_all("wire", &cases, run);
+    common::run_all("wire", &common::section("wire"), run);
 }

@@ -259,32 +259,45 @@ fn detail_of(e: &Event) -> Option<Vec<u8>> {
     let area_field = || e.area.and_then(|a| some("area", move |w| area(w, &a)));
     match e.kind.as_str() {
         kind::CLICK | kind::AUX_CLICK => {
-            let mut f = vec![
-                area_field(),
-                int_field("mods", mods),
-                e.link
-                    .as_ref()
-                    .map(|l| l.href.as_str())
-                    .and_then(|href| some("href", move |w| w.str(href))),
-                e.link.as_ref().and_then(|l| str_field("url", &l.url)),
-                str_field("value", &e.value),
+            let strings = [
+                ("href", e.link.as_ref().map(|l| l.href.as_str())),
+                ("url", e.link.as_ref().and_then(|l| l.url.as_deref())),
+                ("value", e.value.as_deref()),
             ];
-            if e.kind == kind::CLICK {
-                f.push(int_field(
-                    "count",
-                    e.count.filter(|&n| n > 1).map(i64::from),
-                ));
+            let count = [("count", e.count.filter(|&n| n > 1).map(i64::from))];
+            let aux = [("button", button), ("c", e.c), ("r", e.r)];
+            let numbers = if e.kind == kind::CLICK {
+                &count[..]
             } else {
-                f.extend([
-                    int_field("button", button),
-                    int_field("c", e.c),
-                    int_field("r", e.r),
-                ]);
-            }
-            if f.iter().all(Option::is_none) {
+                &aux
+            };
+            let len = usize::from(e.area.is_some())
+                + usize::from(mods.is_some())
+                + strings.iter().filter(|(_, value)| value.is_some()).count()
+                + numbers.iter().filter(|(_, value)| value.is_some()).count();
+            if len == 0 {
                 return None;
             }
-            fields(&mut w, f);
+            w.map(len);
+            if let Some(a) = &e.area {
+                w.str("area");
+                area(&mut w, a);
+            }
+            if let Some(value) = mods {
+                w.str("mods");
+                int(&mut w, value);
+            }
+            for (key, value) in strings {
+                if let Some(value) = value {
+                    w.kv_str(key, value);
+                }
+            }
+            for &(key, value) in numbers {
+                if let Some(value) = value {
+                    w.str(key);
+                    int(&mut w, value);
+                }
+            }
         }
         kind::PRESS | kind::CONTEXT_MENU => {
             let f = vec![

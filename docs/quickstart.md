@@ -137,11 +137,15 @@ document also runs in a 0.8 session. Open the same menu from
 `rightbutton`, the physical secondary button arrives as `kind::AUX_CLICK`
 with that same button number in 0.9.
 
-Anchor the menu at the event's pointer cell when supplied. For the menu
-key or Shift+F10 use the focused element's area. A host can report either
-key as a `contextmenu` with no pointer cell. Place the menu surface at a
-higher `z`, give it focus, and close it on a pick, blur, Escape, scroll or
-resize (SDK.md §4.7).
+Anchor the menu at the event's pointer cell when supplied. A host can
+report the menu key or Shift+F10 as a `contextmenu` with no pointer cell.
+Use the event's `area` in that case. If the keys arrive as ordinary input,
+handle `context_menu` and `shift+f10` (`KeyCode::Menu` and Shift+F10 in
+ratatui). Open the same menu at the area of the last focused element.
+On a surface, the last `focus` event names that element. In cells, use
+the program's focus state and layout. Place the menu surface at a higher
+`z`, give it focus, and close it on a pick, blur, the menu key, Escape,
+scroll or resize (SDK.md §4.7).
 
 ## Next
 
